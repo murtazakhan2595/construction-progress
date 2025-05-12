@@ -2,9 +2,50 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Construction Volume Analysis</title>
   <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 min-h-screen flex flex-col items-center justify-center p-6">
+
+  <div class="w-full max-w-4xl bg-white shadow-xl rounded-2xl p-8 space-y-6">
+    <h1 class="text-4xl font-bold text-center text-blue-700">📐 Construction Volume Analysis</h1>
+
+    <form id="uploadForm" enctype="multipart/form-data" class="space-y-4" onsubmit="uploadImages(event);">
+      <div>
+        <label class="block mb-1 font-semibold text-gray-700">Before Images:</label>
+        <input type="file" name="before_images" multiple required class="block w-full border border-gray-300 rounded-lg px-4 py-2" />
+      </div>
+      <div>
+        <label class="block mb-1 font-semibold text-gray-700">After Images:</label>
+        <input type="file" name="after_images" multiple required class="block w-full border border-gray-300 rounded-lg px-4 py-2" />
+      </div>
+      <button type="submit" class="w-full bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 transition">Upload & Analyze</button>
+    </form>
+
+    <!-- Loaders -->
+    <div id="uploading" class="hidden text-center text-gray-600 animate-pulse">🔄 Uploading images...</div>
+    <div id="processing" class="hidden text-center text-gray-600 animate-pulse">⚙️ Processing and calculating volume...</div>
+
+    <!-- Result Section -->
+    <div id="resultsSection" class="hidden">
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-6 mt-4">
+        <div class="flex flex-col items-center">
+          <h3 class="text-lg font-medium text-gray-700 mb-2">🖼️ Before</h3>
+          <img id="beforeResult" class="w-full object-contain rounded-lg border shadow" />
+        </div>
+        <div class="flex flex-col items-center">
+          <h3 class="text-lg font-medium text-gray-700 mb-2">🖼️ After</h3>
+          <img id="afterResult" class="w-full object-contain rounded-lg border shadow" />
+        </div>
+      </div>
+
+      <div id="volumeSection" class="mt-8 bg-blue-100 p-6 rounded-lg shadow text-center hidden">
+        <h3 class="text-2xl font-semibold text-blue-800">📊 Volume Change Detected</h3>
+        <p id="volumeChange" class="text-xl text-blue-700 font-medium mt-2"></p>
+      </div>
+    </div>
+  </div>
 
   <script>
     function showLoader(stage) {
@@ -19,22 +60,12 @@
       event.preventDefault();
       showLoader('uploading');
 
-      let formData = new FormData();
-      const beforeFiles = document.querySelector('input[name="before_images[]"]').files;
-      const afterFiles = document.querySelector('input[name="after_images[]"]').files;
-
-      for (let i = 0; i < beforeFiles.length; i++) {
-        formData.append('before_images', beforeFiles[i]);
-      }
-      for (let i = 0; i < afterFiles.length; i++) {
-        formData.append('after_images', afterFiles[i]);
-      }
-
+      const formData = new FormData(event.target);
       fetch('/upload', {
         method: 'POST',
         body: formData
       })
-      .then(response => response.json())
+      .then(res => res.json())
       .then(data => {
         hideLoader('uploading');
 
@@ -48,73 +79,36 @@
             checkProcessingStatus(data.task_id);
           }
         } else {
-          alert("Error: " + data.error);
+          alert("❌ Error: " + data.error);
         }
       })
-      .catch(error => {
+      .catch(err => {
         hideLoader('uploading');
-        alert("Upload failed: " + error.message);
+        alert("❌ Upload error: " + err.message);
       });
     }
 
     function checkProcessingStatus(taskId) {
       fetch(`/check_webodm/${taskId}`)
-      .then(response => response.json())
-      .then(data => {
-        if (data.status === "completed") {
+        .then(res => res.json())
+        .then(data => {
+          if (data.status === "completed") {
+            hideLoader('processing');
+            document.getElementById('volumeChange').innerText = data.volume_change + " m³";
+            document.getElementById('volumeSection').classList.remove('hidden');
+          } else if (data.status === "failed") {
+            hideLoader('processing');
+            alert("❌ WebODM processing failed.");
+          } else {
+            setTimeout(() => checkProcessingStatus(taskId), 4000);
+          }
+        })
+        .catch(err => {
           hideLoader('processing');
-          document.getElementById('volumeChange').innerText = "📏 Volume Change: " + data.volume_change + " cubic meters";
-          document.getElementById('volumeSection').classList.remove('hidden');
-        } else if (data.status === "failed") {
-          hideLoader('processing');
-          alert("Error: WebODM processing failed.");
-        } else {
-          setTimeout(() => checkProcessingStatus(taskId), 5000);
-        }
-      })
-      .catch(error => {
-        hideLoader('processing');
-        alert("Error checking WebODM status: " + error.message);
-      });
+          alert("❌ Check failed: " + err.message);
+        });
     }
   </script>
-</head>
-<body class="bg-gray-100 flex flex-col items-center justify-center min-h-screen p-4">
-  <h2 class="text-3xl font-bold text-gray-800 mb-4 text-center">Construction Volume Analysis</h2>
 
-  <form id="uploadForm" enctype="multipart/form-data" class="space-y-4 w-full max-w-3xl" onsubmit="uploadImages(event);">
-    <div>
-      <label class="block text-gray-600 font-medium">Before Images:</label>
-      <input type="file" name="before_images[]" multiple required class="w-full px-3 py-2 border rounded-lg shadow-sm">
-    </div>
-    <div>
-      <label class="block text-gray-600 font-medium">After Images:</label>
-      <input type="file" name="after_images[]" multiple required class="w-full px-3 py-2 border rounded-lg shadow-sm">
-    </div>
-    <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 rounded-lg transition duration-300">
-      Upload & Analyze
-    </button>
-  </form>
-
-  <div id="uploading" class="hidden mt-6 text-center text-gray-700">🔄 Uploading images...</div>
-  <div id="processing" class="hidden mt-6 text-center text-gray-700">⚙️ Processing images...</div>
-
-  <div id="resultsSection" class="hidden mt-6 flex flex-col items-center w-full">
-    <div class="w-full flex justify-center gap-4">
-      <div class="w-[20%] flex flex-col items-center">
-        <h3 class="text-lg font-semibold text-gray-700 mb-2">Before (YOLO)</h3>
-        <img id="beforeResult" class="w-full h-auto object-contain rounded-lg shadow-md">
-      </div>
-      <div class="w-[20%] flex flex-col items-center">
-        <h3 class="text-lg font-semibold text-gray-700 mb-2">After (YOLO)</h3>
-        <img id="afterResult" class="w-full h-auto object-contain rounded-lg shadow-md">
-      </div>
-    </div>
-
-    <div id="volumeSection" class="p-6 mt-6 bg-blue-50 border border-blue-300 rounded-lg shadow-md text-center hidden">
-      <h3 class="text-2xl font-bold text-gray-800">📏 Volume Calculation</h3>
-      <p id="volumeChange" class="text-xl text-blue-700 font-semibold mt-2"></p>
-    </div>
-  </div>
 </body>
 </html>
