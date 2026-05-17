@@ -17,6 +17,7 @@ from datetime import datetime
 import numpy as np
 
 from road_layers import ROAD_LAYERS, NUM_CLASSES, layer_name
+from cost import build_boq
 
 app = Flask(__name__)
 
@@ -906,11 +907,18 @@ class ConstructionVolumeAnalyzer:
             }
         }
         
+        # Cost breakdown (Bill of Quantities) from volume + detected layers
+        report["detected_layers"] = [
+            {"layer": d.get("layer"), "confidence": round(d.get("confidence", 0), 3)}
+            for d in self.detected_layers
+        ]
+        report["boq"] = build_boq(volume_result, self.detected_layers)
+
         # Save report to file
         report_path = os.path.join(RESULTS_FOLDER, f"analysis_report_{self.task_id}.json")
         with open(report_path, 'w') as f:
             json.dump(report, f, indent=2)
-            
+
         return report
 
     def interpret_volume_change(self, volume):

@@ -122,10 +122,12 @@ biggest unknown — the CloudCompare volume chain has never produced a verified 
 - [x] Plug-in point ready: drop in `best.pt`, set `YOLO_MODEL_PATH`, done.
       The custom model must be trained with classes in `road_layers.py` ID order.
 
-### Phase 5 — Cost module  *(needs rate list)*
-- [ ] Add editable unit-rate table (road layer → unit → rate).
-- [ ] Compute cost = quantity (volume/area) × rate.
-- [ ] Show a Bill of Quantities (BOQ) on the results page.
+### Phase 5 — Cost module  *(needs rate list)* — DONE
+- [x] Editable unit-rate table — in `road_layers.py` (rates are PLACEHOLDERS;
+      replace with the official BOQ rates from the project owner).
+- [x] `cost.py` — `build_boq()` computes cost = quantity × rate; splits the
+      measured volume across detected layers by detection bbox area.
+- [x] BOQ table rendered on the results page; included in the analysis report.
 
 ### Phase 6 — S-curve & Excel reporting  *(needs project plan)*
 - [ ] Accept a planned schedule input (planned cost/progress over time).
@@ -152,4 +154,6 @@ biggest unknown — the CloudCompare volume chain has never produced a verified 
 - 2026-05-17 — Project consolidated; git commits for Phases 0-2.
   Phase 3 BLOCKED on drone image sets from project owner.
 - 2026-05-17 — Phase 4 complete: `road_layers.py` table added, YOLO model
-  path configurable, structured detections. Next: Phase 5 cost module.
+  path configurable, structured detections.
+- 2026-05-17 — Phase 5 complete: `cost.py` BOQ builder, cost wired into the
+  analysis report, BOQ table on results page. Next: Phase 6 S-curve + Excel.
