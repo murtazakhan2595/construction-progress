@@ -129,10 +129,14 @@ biggest unknown — the CloudCompare volume chain has never produced a verified 
       measured volume across detected layers by detection bbox area.
 - [x] BOQ table rendered on the results page; included in the analysis report.
 
-### Phase 6 — S-curve & Excel reporting  *(needs project plan)*
-- [ ] Accept a planned schedule input (planned cost/progress over time).
-- [ ] Generate the S-curve: planned vs actual, with deviation.
-- [ ] Export a full Excel report (volume, BOQ, cost, S-curve data) via `openpyxl`.
+### Phase 6 — S-curve & Excel reporting  *(needs project plan)* — DONE
+- [x] `project_plan.json` — owner-supplied planned schedule (budget, periods,
+      optional explicit planned curve). Owner must fill with the real plan.
+- [x] `scurve.py` — planned vs actual S-curve + deviation/performance index;
+      renders a chart PNG via matplotlib. `progress.py` accumulates actuals.
+- [x] `report_excel.py` — Excel export (Summary, BOQ, S-Curve sheets + line
+      chart) via `openpyxl`; served at `/report-excel/<task_id>`.
+- [x] Results page shows the S-curve chart and an Excel download button.
 
 ### Phase 7 — Integrate, test, hand over  *(needs all above)*
 - [ ] Wire every module into a single results view.
@@ -156,4 +160,7 @@ biggest unknown — the CloudCompare volume chain has never produced a verified 
 - 2026-05-17 — Phase 4 complete: `road_layers.py` table added, YOLO model
   path configurable, structured detections.
 - 2026-05-17 — Phase 5 complete: `cost.py` BOQ builder, cost wired into the
-  analysis report, BOQ table on results page. Next: Phase 6 S-curve + Excel.
+  analysis report, BOQ table on results page.
+- 2026-05-17 — Phase 6 complete: `scurve.py` + `progress.py` + `project_plan.json`
+  + `report_excel.py`; S-curve chart and Excel export wired into the app and UI.
+  Next: Phase 3 (volume pipeline, blocked on drone images) then Phase 7.

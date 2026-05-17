@@ -1,0 +1,11 @@
+{
+  "_instructions": "Project owner: fill this with the real project schedule. 'planned_cumulative' is the planned cumulative cost at the end of each period and must have the same length as 'period_labels'. Leave 'planned_cumulative' as [] to auto-generate a standard S-curve from 'total_budget'.",
+  "project_name": "Road Construction Project",
+  "currency": "PKR",
+  "total_budget": 50000000,
+  "period_labels": [
+    "Month 1", "Month 2", "Month 3", "Month 4", "Month 5", "Month 6",
+    "Month 7", "Month 8", "Month 9", "Month 10", "Month 11", "Month 12"
+  ],
+  "planned_cumulative": []
+}

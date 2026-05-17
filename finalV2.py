@@ -1,5 +1,5 @@
 
-from flask import Flask, request, jsonify, render_template, send_from_directory
+from flask import Flask, request, jsonify, render_template, send_from_directory, send_file
 import os
 import subprocess
 import uuid
@@ -13,11 +13,15 @@ import threading
 import re
 import glob
 import json
+import io
 from datetime import datetime
 import numpy as np
 
 from road_layers import ROAD_LAYERS, NUM_CLASSES, layer_name
 from cost import build_boq
+from scurve import generate_planned_curve, build_scurve, render_scurve_png
+from progress import record_progress, actual_cumulative
+from report_excel import build_excel_report
 
 app = Flask(__name__)
 
@@ -98,6 +102,22 @@ logging.basicConfig(
 
 # Global Task Status Store
 task_status_store = {}
+
+
+def load_project_plan():
+    """Load the planned schedule from project_plan.json (owner-supplied)."""
+    try:
+        with open("project_plan.json") as f:
+            plan = json.load(f)
+    except Exception as e:
+        logging.warning(f"project_plan.json not loaded ({e}); using defaults")
+        plan = {}
+    plan.setdefault("project_name", "Road Construction Project")
+    plan.setdefault("currency", "PKR")
+    plan.setdefault("total_budget", 0)
+    plan.setdefault("period_labels", [])
+    plan.setdefault("planned_cumulative", [])
+    return plan
 
 class ConstructionVolumeAnalyzer:
     def __init__(self, task_id):
@@ -914,6 +934,22 @@ class ConstructionVolumeAnalyzer:
         ]
         report["boq"] = build_boq(volume_result, self.detected_layers)
 
+        # S-curve: planned schedule vs accumulated actual progress
+        plan = load_project_plan()
+        report["project_name"] = plan.get("project_name")
+        record_progress(self.task_id, report["boq"]["total_cost"], volume_result)
+        planned = plan.get("planned_cumulative") or generate_planned_curve(
+            plan.get("total_budget", 0), len(plan.get("period_labels", [])))
+        report["scurve"] = build_scurve(
+            planned, actual_cumulative(), plan.get("period_labels"))
+        try:
+            png_path = os.path.join(RESULTS_FOLDER, f"scurve_{self.task_id}.png")
+            render_scurve_png(report["scurve"], png_path,
+                              plan.get("currency", "PKR"))
+            report["scurve_image"] = f"/result-file/scurve_{self.task_id}.png"
+        except Exception as e:
+            logging.error(f"S-curve render failed: {e}")
+
         # Save report to file
         report_path = os.path.join(RESULTS_FOLDER, f"analysis_report_{self.task_id}.json")
         with open(report_path, 'w') as f:
@@ -1097,8 +1133,30 @@ def download_asset(task_id, asset_type):
 
 @app.route('/result-file/<filename>')
 def serve_results(filename):
-    """Serve result files (detection preview images, etc.)"""
+    """Serve result files (detection previews, S-curve charts, etc.)"""
     return send_from_directory(RESULTS_FOLDER, filename)
+
+
+@app.route('/report-excel/<task_id>')
+def download_excel_report(task_id):
+    """Generate and download the Excel report for a completed task."""
+    report_path = os.path.join(RESULTS_FOLDER, f"analysis_report_{task_id}.json")
+    if not os.path.exists(report_path):
+        return jsonify({"error": "Report not found"}), 404
+    try:
+        with open(report_path) as f:
+            report = json.load(f)
+        xlsx = build_excel_report(report)
+        return send_file(
+            io.BytesIO(xlsx),
+            mimetype="application/vnd.openxmlformats-officedocument."
+                     "spreadsheetml.sheet",
+            as_attachment=True,
+            download_name=f"construction_report_{task_id[:8]}.xlsx",
+        )
+    except Exception as e:
+        logging.error(f"Excel report generation failed: {e}")
+        return jsonify({"error": "Excel generation failed"}), 500
 
 @app.route('/health')
 def health_check():

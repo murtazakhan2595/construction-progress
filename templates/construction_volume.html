@@ -479,7 +479,11 @@
                     <!-- Results will be populated here -->
                 </div>
                 <div id="boqContainer"></div>
+                <div id="scurveContainer"></div>
                 <div class="button-group">
+                    <button type="button" class="btn btn-primary" onclick="downloadExcel()">
+                        📊 Excel Report
+                    </button>
                     <button type="button" class="btn btn-primary" onclick="downloadReport()">
                         📥 Download Report
                     </button>
@@ -756,8 +760,28 @@
             // Bill of Quantities table
             renderBOQ(results.boq);
 
+            // S-curve chart
+            renderScurve(results);
+
             // Reset analyze button
             document.getElementById('analyzeBtn').disabled = false;
+        }
+
+        function renderScurve(results) {
+            const container = document.getElementById('scurveContainer');
+            container.innerHTML = '';
+            if (!results.scurve_image) return;
+            const s = (results.scurve && results.scurve.summary) || {};
+            let summary = '';
+            if (s.status) {
+                summary = `<p style="color:#7f8c8d;">Status: <b>${s.status}</b>` +
+                    ` &nbsp;|&nbsp; Performance index: <b>${s.performance_index}</b></p>`;
+            }
+            container.innerHTML = `
+                <h3 style="margin:25px 0 10px;color:#2c3e50;">📈 Project S-Curve</h3>
+                ${summary}
+                <img src="${results.scurve_image}" style="max-width:100%;border-radius:8px;
+                     box-shadow:0 2px 10px rgba(0,0,0,0.1);">`;
         }
 
         function renderBOQ(boq) {
@@ -877,6 +901,14 @@
         }
 
         // Download functions
+        function downloadExcel() {
+            if (!currentTaskId) {
+                showError('No analysis results available');
+                return;
+            }
+            window.location = `/report-excel/${currentTaskId}`;
+        }
+
         async function downloadReport() {
             if (!currentTaskId) {
                 showError('No analysis results available');
