@@ -1,0 +1,24 @@
+# Virtual environment
+.venv/
+venv/
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Runtime working data
+uploads/*
+results/*
+dems/*
+meshes/*
+point_clouds/*
+downloaded_assets/*
+gcp_files/*
+!*/.gitkeep
+
+# Logs
+*.log
+
+# OS / editor
+.DS_Store
+Thumbs.db

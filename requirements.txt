@@ -1,0 +1,26 @@
+# Construction Volume Analysis - Python dependencies
+# Install with:  pip install -r requirements.txt
+
+# Web framework
+Flask>=3.0
+
+# HTTP client (WebODM API calls)
+requests>=2.31
+
+# AI / object detection (pulls in torch, torchvision, opencv, pillow, numpy)
+ultralytics>=8.1
+
+# Image processing (also pulled by ultralytics; pinned explicitly)
+opencv-python>=4.9
+numpy>=1.26
+
+# Reporting - Excel export (Phase 6)
+openpyxl>=3.1
+
+# Charts - S-curve generation (Phase 6)
+matplotlib>=3.8
+
+# --- Optional ---
+# GDAL/rasterio give the most accurate DEM volume math, but are hard to install
+# on Windows. The app falls back to CloudCompare's volume tool if these are absent.
+# rasterio>=1.3

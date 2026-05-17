@@ -1,0 +1,298 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Volume Change Detection</title>
+  <style>
+    :root {
+      --bg-color-light: #f2f4f8;
+      --card-bg-light: #ffffff;
+      --text-color-light: #2c3e50;
+
+      --bg-color-dark: #1e1e2f;
+      --card-bg-dark: #2c2c3f;
+      --text-color-dark: #ecf0f1;
+
+      --primary: #4a90e2;
+      --accent: #1f78d1;
+      --success: #2ecc71;
+      --error: #e74c3c;
+      --font: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: var(--font);
+      background-color: var(--bg-color-light);
+      color: var(--text-color-light);
+      transition: background 0.4s, color 0.4s;
+      padding: 40px 20px;
+    }
+
+    body.dark {
+      background-color: var(--bg-color-dark);
+      color: var(--text-color-dark);
+    }
+
+    .container {
+      max-width: 1000px;
+      margin: auto;
+      background: var(--card-bg-light);
+      padding: 40px;
+      border-radius: 16px;
+      box-shadow: 0 12px 30px rgba(0, 0, 0, 0.08);
+      transition: background 0.4s;
+    }
+
+    body.dark .container {
+      background: var(--card-bg-dark);
+    }
+
+    h1 {
+      text-align: center;
+      font-size: 2.5em;
+      color: var(--primary);
+      margin-bottom: 30px;
+    }
+
+    label {
+      display: block;
+      margin-top: 25px;
+      font-weight: 600;
+      font-size: 1.1em;
+    }
+
+    input[type="file"] {
+      margin-top: 10px;
+      font-size: 16px;
+      padding: 10px;
+      border: 1px solid #ccc;
+      border-radius: 8px;
+      width: 100%;
+      background-color: #f9f9f9;
+    }
+
+    button {
+      margin-top: 35px;
+      padding: 14px 28px;
+      font-size: 1.1em;
+      font-weight: bold;
+      color: #fff;
+      background: linear-gradient(to right, var(--primary), var(--accent));
+      border: none;
+      border-radius: 10px;
+      cursor: pointer;
+      transition: 0.3s;
+      display: block;
+      margin-left: auto;
+      margin-right: auto;
+    }
+
+    button:hover {
+      transform: scale(1.05);
+    }
+
+    .images-container {
+      margin-top: 40px;
+      display: flex;
+      justify-content: space-around;
+      gap: 30px;
+      flex-wrap: wrap;
+    }
+
+    .image-box {
+      background: #f0f4fa;
+      padding: 20px;
+      border-radius: 15px;
+      text-align: center;
+      width: 100%;
+      max-width: 400px;
+    }
+
+    body.dark .image-box {
+      background: #353545;
+    }
+
+    .image-box img {
+      width: 100%;
+      height: auto;
+      border-radius: 12px;
+      border: 2px solid #e1e4e8;
+    }
+
+    #statusMessage, #volumeResult {
+      text-align: center;
+      margin-top: 25px;
+      font-size: 1.2em;
+    }
+
+    #volumeResult {
+      font-weight: bold;
+      color: var(--success);
+    }
+
+    #progressBar {
+      width: 80%;
+      margin: 20px auto;
+      height: 20px;
+      background-color: #ddd;
+      border-radius: 10px;
+      overflow: hidden;
+    }
+
+    #progressBarFill {
+      height: 100%;
+      width: 0%;
+      background-color: var(--primary);
+      transition: width 0.5s;
+    }
+
+    .dark-mode-toggle {
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      background: #00000010;
+      padding: 10px 15px;
+      border-radius: 10px;
+      cursor: pointer;
+      font-size: 0.95em;
+      border: 1px solid #ccc;
+    }
+
+    a.download-btn {
+      display: block;
+      text-align: center;
+      margin: 25px auto;
+      background-color: var(--accent);
+      color: #fff;
+      text-decoration: none;
+      padding: 12px 24px;
+      border-radius: 8px;
+      font-weight: bold;
+      width: fit-content;
+    }
+  </style>
+</head>
+<body>
+  <div class="dark-mode-toggle" onclick="toggleDarkMode()">🌙 Toggle Dark Mode</div>
+  <div class="container">
+    <h1>📐 Volume Change Detection</h1>
+
+    <form id="uploadForm">
+      <label for="before_images">Upload BEFORE images:</label>
+      <input type="file" id="before_images" name="before_images" multiple required accept="image/*" />
+
+      <label for="after_images">Upload AFTER images:</label>
+      <input type="file" id="after_images" name="after_images" multiple required accept="image/*" />
+
+      <button type="submit">🚀 Submit for Processing</button>
+    </form>
+
+    <div id="progressBar">
+      <div id="progressBarFill"></div>
+    </div>
+
+    <div class="images-container" id="resultImages" style="display:none;">
+      <div class="image-box">
+        <h3>Before Image with Detection</h3>
+        <img id="beforeResult" alt="Before Detection" />
+      </div>
+      <div class="image-box">
+        <h3>After Image with Detection</h3>
+        <img id="afterResult" alt="After Detection" />
+      </div>
+    </div>
+
+    <div id="statusMessage"></div>
+    <div id="volumeResult"></div>
+    <a href="#" id="downloadLink" class="download-btn" style="display:none;">📥 Download Report</a>
+  </div>
+
+  <script>
+    const uploadForm = document.getElementById("uploadForm");
+    const beforeResult = document.getElementById("beforeResult");
+    const afterResult = document.getElementById("afterResult");
+    const resultImages = document.getElementById("resultImages");
+    const statusMessage = document.getElementById("statusMessage");
+    const volumeResult = document.getElementById("volumeResult");
+    const progressBarFill = document.getElementById("progressBarFill");
+    const downloadLink = document.getElementById("downloadLink");
+
+    function toggleDarkMode() {
+      document.body.classList.toggle("dark");
+    }
+
+    uploadForm.addEventListener("submit", async (e) => {
+      e.preventDefault();
+
+      statusMessage.textContent = "⏳ Uploading and processing images...";
+      progressBarFill.style.width = "20%";
+      volumeResult.textContent = "";
+      resultImages.style.display = "none";
+      downloadLink.style.display = "none";
+
+      const formData = new FormData(uploadForm);
+
+      try {
+        const response = await fetch("/upload", {
+          method: "POST",
+          body: formData,
+        });
+
+        if (!response.ok) {
+          const err = await response.json();
+          statusMessage.textContent = `❌ Error: ${err.error || "Unknown error"}`;
+          return;
+        }
+
+        const data = await response.json();
+
+        beforeResult.src = data.before_result;
+        afterResult.src = data.after_result;
+        resultImages.style.display = "flex";
+        statusMessage.textContent = "📊 Calculating volume difference...";
+        progressBarFill.style.width = "40%";
+
+        pollVolume(data.task_id);
+      } catch (error) {
+        statusMessage.textContent = `❌ Error: ${error.message}`;
+      }
+    });
+
+    function pollVolume(taskId) {
+      let progress = 50;
+      const intervalId = setInterval(async () => {
+        try {
+          const res = await fetch(`/check_webodm/${taskId}`);
+          const data = await res.json();
+
+          progress = Math.min(progress + 10, 90);
+          progressBarFill.style.width = progress + "%";
+
+          if (data.status === "completed") {
+            volumeResult.textContent = `✅ Volume Change: ${data.volume_change}`;
+            statusMessage.textContent = "✔️ Process completed successfully.";
+            progressBarFill.style.width = "100%";
+            downloadLink.href = data.report_url;
+            downloadLink.style.display = "block";
+            clearInterval(intervalId);
+          } else if (data.status === "failed" || data.status === "error") {
+            statusMessage.textContent = `❌ Error: ${data.message || "Failed to compute volume"}`;
+            clearInterval(intervalId);
+          }
+        } catch (e) {
+          statusMessage.textContent = "❌ Error checking volume status.";
+          clearInterval(intervalId);
+        }
+      }, 5000);
+    }
+  </script>
+</body>
+</html>
