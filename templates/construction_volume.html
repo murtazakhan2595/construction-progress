@@ -747,12 +747,12 @@
             const beforeImg = document.getElementById('beforeDetection');
             const afterImg = document.getElementById('afterDetection');
             
-            if (detectionResults.before) {
-                beforeImg.src = detectionResults.before;
+            if (detectionResults.before && detectionResults.before.image) {
+                beforeImg.src = detectionResults.before.image;
             }
-            
-            if (detectionResults.after) {
-                afterImg.src = detectionResults.after;
+
+            if (detectionResults.after && detectionResults.after.image) {
+                afterImg.src = detectionResults.after.image;
             }
             
             preview.style.display = 'block';

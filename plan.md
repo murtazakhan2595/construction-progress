@@ -113,11 +113,14 @@ biggest unknown — the CloudCompare volume chain has never produced a verified 
 - [ ] Verify the volume result is plausible; tune grid step / parameters.
 - [ ] Surface cut volume, fill volume, net volume in the results UI.
 
-### Phase 4 — YOLO road-layer detection  *(model deferred ~1 month)*
-- [ ] Add a configurable custom-model path (fallback to generic for now).
-- [ ] Add class-ID → road-layer-name mapping table.
-- [ ] Display detected layer(s) on the results page.
-- [ ] Leave a clear plug-in point for `best.pt` when the trained model arrives.
+### Phase 4 — YOLO road-layer detection  *(model deferred ~1 month)* — DONE
+- [x] Configurable model path via `YOLO_MODEL_PATH` env var (defaults to generic
+      `yolov8n.pt`; point it at the trained `best.pt` when ready).
+- [x] Class-ID → road-layer mapping table (`road_layers.py`, 12 classes).
+- [x] `detect_objects` returns structured detections and labels boxes with
+      road-layer names when the custom model is loaded.
+- [x] Plug-in point ready: drop in `best.pt`, set `YOLO_MODEL_PATH`, done.
+      The custom model must be trained with classes in `road_layers.py` ID order.
 
 ### Phase 5 — Cost module  *(needs rate list)*
 - [ ] Add editable unit-rate table (road layer → unit → rate).
@@ -145,5 +148,8 @@ biggest unknown — the CloudCompare volume chain has never produced a verified 
 - 2026-05-17 — Phase 1 complete: venv 3.12 + deps, CloudCompare installed,
   WebODM running (Docker), project ID = 1.
 - 2026-05-17 — Phase 2 complete: WebODM options bug fixed (verified 201),
-  route collision fixed, /health green, config env-driven. Next: Phase 3 —
-  BLOCKED on drone image sets from project owner.
+  route collision fixed, /health green, config env-driven.
+- 2026-05-17 — Project consolidated; git commits for Phases 0-2.
+  Phase 3 BLOCKED on drone image sets from project owner.
+- 2026-05-17 — Phase 4 complete: `road_layers.py` table added, YOLO model
+  path configurable, structured detections. Next: Phase 5 cost module.

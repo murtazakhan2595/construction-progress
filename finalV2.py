@@ -16,6 +16,8 @@ import json
 from datetime import datetime
 import numpy as np
 
+from road_layers import ROAD_LAYERS, NUM_CLASSES, layer_name
+
 app = Flask(__name__)
 
 # Directories
@@ -31,13 +33,26 @@ GCP_FOLDER = "gcp_files"
 for folder in [UPLOAD_FOLDER, RESULTS_FOLDER, DOWNLOAD_FOLDER, POINT_CLOUD_FOLDER, MESH_FOLDER, DEM_FOLDER, GCP_FOLDER]:
     os.makedirs(folder, exist_ok=True)
 
-# YOLOv8 Model for object detection (optional feature)
+# YOLOv8 model for road-layer detection.
+# Set the YOLO_MODEL_PATH environment variable to the custom-trained road-layer
+# model when it is ready; until then it falls back to the generic yolov8n.pt.
+YOLO_MODEL_PATH = os.environ.get("YOLO_MODEL_PATH", "yolov8n.pt")
+YOLO_CONFIDENCE = float(os.environ.get("YOLO_CONFIDENCE", "0.25"))
 try:
-    model = YOLO("yolov8n.pt")
+    model = YOLO(YOLO_MODEL_PATH)
     YOLO_AVAILABLE = True
-except:
+    # Treat the model as a road-layer model when its class count matches our
+    # canonical road-layer table; otherwise it is a generic (COCO) model.
+    USING_ROAD_LAYER_MODEL = len(model.names) == NUM_CLASSES
+    logging.info(
+        f"YOLO model loaded: {YOLO_MODEL_PATH} "
+        f"({'road-layer' if USING_ROAD_LAYER_MODEL else 'generic'} model)"
+    )
+except Exception as e:
+    model = None
     YOLO_AVAILABLE = False
-    logging.warning("YOLOv8 model not available. Object detection disabled.")
+    USING_ROAD_LAYER_MODEL = False
+    logging.warning(f"YOLO model not available ({e}). Object detection disabled.")
 
 # WebODM Configuration (override via environment variables for different setups)
 WEBODM_URL = os.environ.get("WEBODM_URL", "http://127.0.0.1:8000/api")
@@ -90,6 +105,7 @@ class ConstructionVolumeAnalyzer:
         self.after_images = []
         self.gcp_file = None
         self.processing_options = PROCESSING_OPTIONS.copy()
+        self.detected_layers = []  # road-layer detections, set by upload()
         
     def update_status(self, status, progress=0, message="", data=None):
         """Update task status with progress information"""
@@ -970,7 +986,13 @@ def upload():
         # Start background processing
         task_id = str(uuid.uuid4())
         analyzer = ConstructionVolumeAnalyzer(task_id)
-        
+
+        # Attach road-layer detections (used later for the cost breakdown)
+        if detection_results:
+            after_res = detection_results.get("after")
+            if after_res:
+                analyzer.detected_layers = after_res.get("detections", [])
+
         thread = threading.Thread(
             target=analyzer.process_construction_analysis,
             args=(before_paths, after_paths, gcp_path, options)
@@ -986,10 +1008,14 @@ def upload():
         }
         
         if detection_results:
-            response_data["detection_results"] = {
-                "before": f"/result-file/{os.path.basename(detection_results['before'])}",
-                "after": f"/result-file/{os.path.basename(detection_results['after'])}"
-            }
+            response_data["detection_results"] = {}
+            for phase in ("before", "after"):
+                res = detection_results.get(phase)
+                if res and res.get("image_path"):
+                    response_data["detection_results"][phase] = {
+                        "image": f"/result-file/{os.path.basename(res['image_path'])}",
+                        "detections": res["detections"],
+                    }
         
         return jsonify(response_data)
         
@@ -1125,45 +1151,63 @@ def save_uploaded_files(files, prefix):
     return paths
 
 def detect_objects(image_path, prefix):
-    """Run YOLO object detection on image"""
+    """Run YOLO road-layer detection on an image.
+
+    Returns a dict:
+        {"image_path": <annotated image path>,
+         "detections": [{"layer", "class_id", "confidence", "bbox"}, ...]}
+    or None on failure.
+    """
     if not YOLO_AVAILABLE:
         return None
-        
+
     try:
-        # Load and process image
         img = cv2.imread(image_path)
         if img is None:
             logging.error(f"Could not load image: {image_path}")
             return None
-            
-        # Run detection
-        results = model(img, conf=0.5)
-        
-        # Draw bounding boxes
+
+        results = model(img, conf=YOLO_CONFIDENCE)
+
+        detections = []
         for result in results:
             boxes = result.boxes
-            if boxes is not None:
-                for box in boxes:
-                    # Get coordinates and info
-                    x1, y1, x2, y2 = map(int, box.xyxy[0].cpu().numpy())
-                    confidence = float(box.conf[0].cpu().numpy())
-                    class_id = int(box.cls[0].cpu().numpy())
-                    label = result.names[class_id]
-                    
-                    # Draw rectangle and label
-                    cv2.rectangle(img, (x1, y1), (x2, y2), (0, 255, 0), 2)
-                    cv2.putText(img, f"{label} {confidence:.1%}", 
-                              (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 
-                              0.9, (0, 255, 0), 2)
-        
-        # Save result
+            if boxes is None:
+                continue
+            for box in boxes:
+                x1, y1, x2, y2 = map(int, box.xyxy[0].cpu().numpy())
+                confidence = float(box.conf[0].cpu().numpy())
+                class_id = int(box.cls[0].cpu().numpy())
+
+                # Use canonical road-layer names when the custom model is
+                # loaded; otherwise fall back to the model's own class names.
+                if USING_ROAD_LAYER_MODEL:
+                    label = layer_name(class_id)
+                else:
+                    label = result.names.get(class_id, f"class_{class_id}")
+
+                detections.append({
+                    "layer": label,
+                    "class_id": class_id,
+                    "confidence": confidence,
+                    "bbox": [x1, y1, x2, y2],
+                })
+
+                cv2.rectangle(img, (x1, y1), (x2, y2), (0, 255, 0), 2)
+                cv2.putText(img, f"{label} {confidence:.1%}",
+                            (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX,
+                            0.9, (0, 255, 0), 2)
+
         result_filename = f"{prefix}_detected_{uuid.uuid4().hex}.jpg"
         result_path = os.path.join(RESULTS_FOLDER, result_filename)
         cv2.imwrite(result_path, img)
-        
-        logging.info(f"Object detection completed: {result_path}")
-        return result_path
-        
+
+        logging.info(
+            f"Object detection completed: {result_path} "
+            f"({len(detections)} detections)"
+        )
+        return {"image_path": result_path, "detections": detections}
+
     except Exception as e:
         logging.error(f"Object detection failed: {e}")
         return None
