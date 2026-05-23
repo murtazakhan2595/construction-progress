@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Past Analyses - Construction Volume</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+            margin: 0;
+        }
+        .container {
+            max-width: 1100px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+        .header {
+            background: linear-gradient(135deg, #2c3e50, #34495e);
+            color: white;
+            padding: 26px 30px;
+        }
+        .header h1 { margin: 0; font-size: 1.7rem; }
+        .header a { color: #a5b4fc; text-decoration: none; font-size: 0.95rem; }
+        .content { padding: 30px; }
+        .empty {
+            text-align: center;
+            padding: 60px 20px;
+            color: #7f8c8d;
+        }
+        table { width: 100%; border-collapse: collapse; }
+        th {
+            background: #2c3e50;
+            color: white;
+            padding: 12px;
+            text-align: left;
+            font-size: 0.9rem;
+        }
+        td {
+            padding: 10px 12px;
+            border-bottom: 1px solid #ecf0f1;
+            font-size: 0.9rem;
+        }
+        tr:hover td { background: #f8f9fa; }
+        a.view-link {
+            color: #3498db;
+            text-decoration: none;
+            font-weight: 600;
+        }
+        a.view-link:hover { text-decoration: underline; }
+        .nowrap { white-space: nowrap; }
+        .num { text-align: right; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>📋 Past Analyses</h1>
+            <a href="/">&larr; Back to new analysis</a>
+        </div>
+        <div class="content">
+            {% if runs %}
+            <table>
+                <thead>
+                    <tr>
+                        <th>Project</th>
+                        <th>Date</th>
+                        <th class="num">Volume (m³)</th>
+                        <th class="num">Total Cost</th>
+                        <th>Task ID</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for r in runs %}
+                    <tr>
+                        <td>{{ r.project_name }}</td>
+                        <td class="nowrap">{{ r.timestamp[:19] if r.timestamp else '-' }}</td>
+                        <td class="num">{{ '%.2f'|format(r.volume_m3) if r.volume_m3 is not none else '-' }}</td>
+                        <td class="num">
+                            {% if r.total_cost is not none %}
+                                {{ r.currency }} {{ '{:,.0f}'.format(r.total_cost) }}
+                            {% else %}-{% endif %}
+                        </td>
+                        <td class="nowrap"><code>{{ r.task_id[:8] if r.task_id else '-' }}</code></td>
+                        <td><a class="view-link" href="/?task={{ r.task_id }}">View &rarr;</a></td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+            <div class="empty">
+                <h3>No analyses yet</h3>
+                <p>Run an analysis from the <a href="/">main page</a> to see it listed here.</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</body>
+</html>

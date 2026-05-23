@@ -237,6 +237,44 @@ class ConstructionVolumeAnalyzer:
             logging.error(f"Construction analysis failed: {e}")
             return False
 
+    def process_existing_data(self, before_dsm_path, after_dsm_path, options=None):
+        """Volume analysis from pre-computed DSMs - skips WebODM entirely.
+        Used when the user already has DSM/elevation outputs from a previous
+        photogrammetry run."""
+        try:
+            if options:
+                self.processing_options.update(options)
+
+            self.update_status("processing", 30,
+                                "Loading existing DSMs (skipping WebODM)")
+            before_assets = {"dsm": before_dsm_path, "pointcloud": None,
+                             "orthophoto": None, "dtm": None}
+            after_assets = {"dsm": after_dsm_path, "pointcloud": None,
+                            "orthophoto": None, "dtm": None}
+
+            self.update_status("processing", 60,
+                                "Computing volume difference from DSMs")
+            volume_result = self.calculate_volume_difference(
+                before_dsm_path, after_dsm_path, before_assets, after_assets)
+            if volume_result is None:
+                raise Exception("Volume calculation failed")
+
+            self.update_status("processing", 90, "Generating analysis report")
+            report = self.generate_analysis_report(
+                volume_result, before_assets, after_assets)
+
+            self.update_status("completed", 100,
+                                "Analysis complete (existing-data mode)", {
+                                    "volume_change": volume_result,
+                                    "report": report,
+                                })
+            return True
+        except Exception as e:
+            self.update_status("failed", 0,
+                                f"Existing-data analysis failed: {str(e)}")
+            logging.error(f"Existing-data analysis failed: {e}")
+            return False
+
     def submit_webodm_task(self, phase, image_paths, gcp_path=None):
         """Submit processing task to WebODM with enhanced options"""
         url = f"{WEBODM_URL}/projects/{PROJECT_ID}/tasks/"
@@ -1076,6 +1114,47 @@ def upload():
         logging.error(f"Upload failed: {e}")
         return jsonify({"error": f"Upload failed: {str(e)}"}), 500
 
+@app.route('/upload-existing', methods=['POST'])
+def upload_existing():
+    """Volume analysis from pre-computed DSM/elevation files (skips WebODM)."""
+    try:
+        before_dsm = request.files.get('before_dsm')
+        after_dsm = request.files.get('after_dsm')
+        if not before_dsm or not after_dsm:
+            return jsonify({"error": "Both before and after DSM files are required"}), 400
+        if not before_dsm.filename or not after_dsm.filename:
+            return jsonify({"error": "No files selected"}), 400
+
+        ext_b = os.path.splitext(before_dsm.filename)[1].lower() or ".tif"
+        ext_a = os.path.splitext(after_dsm.filename)[1].lower() or ".tif"
+        before_path = os.path.join(UPLOAD_FOLDER,
+                                   f"before_dsm_{uuid.uuid4().hex}{ext_b}")
+        after_path = os.path.join(UPLOAD_FOLDER,
+                                  f"after_dsm_{uuid.uuid4().hex}{ext_a}")
+        before_dsm.save(before_path)
+        after_dsm.save(after_path)
+        logging.info(f"Saved existing-mode DSMs: {before_path}, {after_path}")
+
+        task_id = str(uuid.uuid4())
+        analyzer = ConstructionVolumeAnalyzer(task_id)
+
+        thread = threading.Thread(
+            target=analyzer.process_existing_data,
+            args=(before_path, after_path),
+        )
+        thread.daemon = True
+        thread.start()
+
+        return jsonify({
+            "success": True,
+            "task_id": task_id,
+            "message": "Volume analysis started (existing-data mode)",
+        })
+    except Exception as e:
+        logging.error(f"Existing-data upload failed: {e}")
+        return jsonify({"error": f"Upload failed: {str(e)}"}), 500
+
+
 @app.route('/status/<task_id>')
 def get_task_status(task_id):
     """Get processing status for a task"""
@@ -1144,6 +1223,31 @@ def download_asset(task_id, asset_type):
 def serve_results(filename):
     """Serve result files (detection previews, S-curve charts, etc.)"""
     return send_from_directory(RESULTS_FOLDER, filename)
+
+
+@app.route('/runs')
+def runs_page():
+    """List all past analyses for revisiting in the UI."""
+    runs = []
+    for path in sorted(
+        glob.glob(os.path.join(RESULTS_FOLDER, 'analysis_report_*.json')),
+        key=os.path.getmtime,
+        reverse=True,
+    ):
+        try:
+            with open(path) as f:
+                report = json.load(f)
+            runs.append({
+                'task_id': report.get('task_id'),
+                'timestamp': report.get('timestamp'),
+                'project_name': report.get('project_name') or '-',
+                'volume_m3': report.get('volume_change_m3'),
+                'total_cost': (report.get('boq') or {}).get('total_cost'),
+                'currency': (report.get('boq') or {}).get('currency', ''),
+            })
+        except Exception as e:
+            logging.warning(f"Skipping {path}: {e}")
+    return render_template('runs.html', runs=runs)
 
 
 @app.route('/report-excel/<task_id>')

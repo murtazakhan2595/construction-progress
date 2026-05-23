@@ -38,10 +38,14 @@ def main():
                         help="Resume an in-progress BEFORE WebODM task")
     parser.add_argument("--after-task-id", default=None,
                         help="Resume an in-progress AFTER WebODM task")
+    parser.add_argument("--before-step", type=int, default=1,
+                        help="Use every Nth BEFORE image (default 1 = all)")
+    parser.add_argument("--after-step", type=int, default=1,
+                        help="Use every Nth AFTER image (default 1 = all)")
     args = parser.parse_args()
 
-    before = collect(BEFORE_DIR)
-    after = collect(AFTER_DIR)
+    before = collect(BEFORE_DIR)[::max(1, args.before_step)]
+    after = collect(AFTER_DIR)[::max(1, args.after_step)]
     print(f"Before: {len(before)} images from {BEFORE_DIR}")
     print(f"After:  {len(after)} images from {AFTER_DIR}")
     if not before or not after:

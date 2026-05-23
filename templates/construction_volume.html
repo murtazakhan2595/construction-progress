@@ -378,6 +378,35 @@
             border-radius: 4px;
             text-align: right;
         }
+
+        .mode-selector {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 14px;
+            margin-bottom: 24px;
+        }
+        .mode-option {
+            border: 2px solid #ddd;
+            border-radius: 10px;
+            padding: 14px 18px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            background: white;
+        }
+        .mode-option.selected {
+            border-color: #3498db;
+            background: #ebf3fb;
+        }
+        .mode-option strong { color: #2c3e50; }
+        .mode-option .desc {
+            color: #7f8c8d;
+            font-size: 0.85rem;
+            margin-top: 4px;
+        }
+        .mode-option input { margin-right: 8px; }
+        @media (max-width: 600px) {
+            .mode-selector { grid-template-columns: 1fr; }
+        }
         
         .error-message {
             background: #f8d7da;
@@ -446,6 +475,11 @@
         <div class="header">
             <h1>🏗️ Construction Volume Analysis</h1>
             <p>Advanced earthwork and construction change detection using photogrammetry</p>
+            <p style="margin-top:10px;">
+                <a href="/runs" style="color:#a5b4fc;text-decoration:none;font-size:0.95rem;">
+                    📋 Past Analyses
+                </a>
+            </p>
         </div>
         
         <div class="content">
@@ -506,23 +540,58 @@
             <form id="uploadForm" enctype="multipart/form-data">
                 <!-- File Upload Section -->
                 <div class="upload-section">
-                    <h2 class="section-title">📸 Upload Images</h2>
-                    
-                    <div class="file-upload-group">
-                        <div class="file-upload" onclick="document.getElementById('beforeImages').click()">
-                            <div class="upload-icon">📤</div>
-                            <h3>Before Images</h3>
-                            <p>Upload images from before construction</p>
-                            <input type="file" id="beforeImages" name="before_images" multiple accept="image/*" required>
-                            <div class="file-list" id="beforeFileList"></div>
+                    <h2 class="section-title">📸 Upload Data</h2>
+
+                    <div class="mode-selector">
+                        <label class="mode-option selected" id="modeOptFresh">
+                            <input type="radio" name="mode" value="fresh" checked onchange="updateMode()">
+                            <strong>Start Fresh</strong>
+                            <div class="desc">Raw drone images → photogrammetry → volume (hours)</div>
+                        </label>
+                        <label class="mode-option" id="modeOptExisting">
+                            <input type="radio" name="mode" value="existing" onchange="updateMode()">
+                            <strong>Use Existing 3D Data</strong>
+                            <div class="desc">Pre-computed DSM .tif files → straight to volume (seconds)</div>
+                        </label>
+                    </div>
+
+                    <div id="freshUploads">
+                        <div class="file-upload-group">
+                            <div class="file-upload" onclick="document.getElementById('beforeImages').click()">
+                                <div class="upload-icon">📤</div>
+                                <h3>Before Images</h3>
+                                <p>Upload images from before construction</p>
+                                <input type="file" id="beforeImages" name="before_images" multiple accept="image/*">
+                                <div class="file-list" id="beforeFileList"></div>
+                            </div>
+
+                            <div class="file-upload" onclick="document.getElementById('afterImages').click()">
+                                <div class="upload-icon">📤</div>
+                                <h3>After Images</h3>
+                                <p>Upload images from after construction</p>
+                                <input type="file" id="afterImages" name="after_images" multiple accept="image/*">
+                                <div class="file-list" id="afterFileList"></div>
+                            </div>
                         </div>
-                        
-                        <div class="file-upload" onclick="document.getElementById('afterImages').click()">
-                            <div class="upload-icon">📤</div>
-                            <h3>After Images</h3>
-                            <p>Upload images from after construction</p>
-                            <input type="file" id="afterImages" name="after_images" multiple accept="image/*" required>
-                            <div class="file-list" id="afterFileList"></div>
+                    </div>
+
+                    <div id="existingUploads" style="display:none;">
+                        <div class="file-upload-group">
+                            <div class="file-upload" onclick="document.getElementById('beforeDsm').click()">
+                                <div class="upload-icon">🗺️</div>
+                                <h3>Before DSM</h3>
+                                <p>Pre-computed DSM .tif from the before survey</p>
+                                <input type="file" id="beforeDsm" name="before_dsm" accept=".tif,.tiff">
+                                <div class="file-list" id="beforeDsmName"></div>
+                            </div>
+
+                            <div class="file-upload" onclick="document.getElementById('afterDsm').click()">
+                                <div class="upload-icon">🗺️</div>
+                                <h3>After DSM</h3>
+                                <p>Pre-computed DSM .tif from the after survey</p>
+                                <input type="file" id="afterDsm" name="after_dsm" accept=".tif,.tiff">
+                                <div class="file-list" id="afterDsmName"></div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -677,12 +746,45 @@
             }
         }
 
+        // Mode toggle (Start Fresh / Use Existing 3D Data)
+        function updateMode() {
+            const mode = document.querySelector('input[name="mode"]:checked').value;
+            const isExisting = mode === 'existing';
+            document.getElementById('freshUploads').style.display = isExisting ? 'none' : 'block';
+            document.getElementById('existingUploads').style.display = isExisting ? 'block' : 'none';
+            document.querySelector('.gcp-upload').style.display = isExisting ? 'none' : 'block';
+            document.querySelector('.options-section').style.display = isExisting ? 'none' : 'block';
+            document.getElementById('modeOptFresh').classList.toggle('selected', !isExisting);
+            document.getElementById('modeOptExisting').classList.toggle('selected', isExisting);
+        }
+
+        // DSM file-pick display
+        ['beforeDsm', 'afterDsm'].forEach(id => {
+            const inp = document.getElementById(id);
+            inp.addEventListener('change', function() {
+                const nameEl = document.getElementById(id + 'Name');
+                const container = inp.closest('.file-upload');
+                nameEl.innerHTML = '';
+                if (this.files[0]) {
+                    const mb = (this.files[0].size / 1024 / 1024).toFixed(1);
+                    nameEl.innerHTML = `<div class="file-item">${this.files[0].name} (${mb} MB)</div>`;
+                    container.classList.add('active');
+                } else {
+                    container.classList.remove('active');
+                }
+            });
+        });
+
         // Form submission
         document.getElementById('uploadForm').addEventListener('submit', async function(e) {
             e.preventDefault();
-            
+            const mode = document.querySelector('input[name="mode"]:checked').value;
+            if (mode === 'existing') {
+                return submitExistingMode();
+            }
+
             const formData = new FormData();
-            
+
             // Add files
             const beforeFiles = document.getElementById('beforeImages').files;
             const afterFiles = document.getElementById('afterImages').files;
@@ -751,6 +853,38 @@
                 document.getElementById('progressContainer').style.display = 'none';
             }
         });
+
+        async function submitExistingMode() {
+            const before = document.getElementById('beforeDsm').files[0];
+            const after = document.getElementById('afterDsm').files[0];
+            if (!before || !after) {
+                showError('Please select both before and after DSM files');
+                return;
+            }
+            const fd = new FormData();
+            fd.append('before_dsm', before);
+            fd.append('after_dsm', after);
+            document.getElementById('analyzeBtn').disabled = true;
+            document.getElementById('progressContainer').style.display = 'block';
+            document.getElementById('resultsContainer').style.display = 'none';
+            clearError();
+            try {
+                const res = await fetch('/upload-existing', { method: 'POST', body: fd });
+                const data = await res.json();
+                if (data.success) {
+                    currentTaskId = data.task_id;
+                    startProgressMonitoring();
+                } else {
+                    showError(data.error || 'Upload failed');
+                    document.getElementById('analyzeBtn').disabled = false;
+                    document.getElementById('progressContainer').style.display = 'none';
+                }
+            } catch (err) {
+                showError('Network error: ' + err.message);
+                document.getElementById('analyzeBtn').disabled = false;
+                document.getElementById('progressContainer').style.display = 'none';
+            }
+        }
 
         // Progress monitoring
         function startProgressMonitoring() {
@@ -1314,6 +1448,15 @@
 
         // Load settings on page load
         loadSettings();
+
+        // If URL has ?task=<id>, auto-load that past result
+        const _urlParams = new URLSearchParams(window.location.search);
+        const _taskFromUrl = _urlParams.get('task');
+        if (_taskFromUrl) {
+            currentTaskId = _taskFromUrl;
+            document.getElementById('resultsContainer').style.display = 'block';
+            loadResults();
+        }
     </script>
 </body>
 </html>
