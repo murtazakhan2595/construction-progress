@@ -19,6 +19,9 @@ gcp_files/*
 # Logs
 *.log
 
+# User-specific runtime data (created via Settings UI)
+rates.json
+
 # OS / editor
 .DS_Store
 Thumbs.db

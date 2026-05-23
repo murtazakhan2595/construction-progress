@@ -163,4 +163,8 @@ biggest unknown — the CloudCompare volume chain has never produced a verified 
   analysis report, BOQ table on results page.
 - 2026-05-17 — Phase 6 complete: `scurve.py` + `progress.py` + `project_plan.json`
   + `report_excel.py`; S-curve chart and Excel export wired into the app and UI.
-  Next: Phase 3 (volume pipeline, blocked on drone images) then Phase 7.
+- 2026-05-23 — Drone images received (Before: 85, After: 161; DJI Zenmuse L1).
+  Added user-editable Settings UI (rate list + project plan) backed by
+  `config_store.py` and `/api/rates`, `/api/plan` endpoints. Fixed generic-YOLO
+  detection so it no longer falsely maps COCO class IDs to road layers.
+  Next: Phase 3 end-to-end with the real images.

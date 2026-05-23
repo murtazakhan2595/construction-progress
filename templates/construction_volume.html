@@ -314,6 +314,70 @@
             background: #f8f9fa;
             border-top: 2px solid #2c3e50;
         }
+
+        .settings-section {
+            background: #f8f9fa;
+            border-radius: 10px;
+            margin-bottom: 30px;
+            border: 1px solid #e0e0e0;
+        }
+        .settings-toggle {
+            width: 100%;
+            background: #2c3e50;
+            color: white;
+            border: none;
+            padding: 14px 20px;
+            text-align: left;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            border-radius: 10px 10px 0 0;
+        }
+        .settings-body { padding: 18px; }
+        .settings-card {
+            background: white;
+            padding: 18px;
+            border-radius: 8px;
+            margin-bottom: 16px;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.05);
+        }
+        .settings-card h3 {
+            margin: 0 0 12px 0;
+            color: #2c3e50;
+            font-size: 1.05rem;
+        }
+        .form-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+            margin-bottom: 12px;
+        }
+        .form-grid label {
+            display: block;
+            font-size: 0.8rem;
+            color: #555;
+            margin-bottom: 4px;
+            font-weight: 600;
+        }
+        .form-grid input {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 0.95rem;
+        }
+        .save-status {
+            margin-left: 12px;
+            font-size: 0.85rem;
+            color: #27ae60;
+        }
+        .rate-input {
+            width: 100px;
+            padding: 4px 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            text-align: right;
+        }
         
         .error-message {
             background: #f8d7da;
@@ -385,6 +449,60 @@
         </div>
         
         <div class="content">
+            <!-- Settings panel (collapsible) -->
+            <div class="settings-section">
+                <button type="button" class="settings-toggle" onclick="toggleSettings()">
+                    <span id="settingsToggleLabel">⚙️ Project Plan &amp; Rate List ▸</span>
+                </button>
+                <div id="settingsBody" class="settings-body" style="display:none;">
+                    <div class="settings-card">
+                        <h3>Project Plan</h3>
+                        <div class="form-grid">
+                            <div>
+                                <label for="planName">Project Name</label>
+                                <input id="planName" type="text">
+                            </div>
+                            <div>
+                                <label for="planCurrency">Currency</label>
+                                <input id="planCurrency" type="text" placeholder="PKR">
+                            </div>
+                            <div>
+                                <label for="planBudget">Total Budget</label>
+                                <input id="planBudget" type="number" min="0">
+                            </div>
+                            <div>
+                                <label for="planPeriods">Period Labels (comma-separated)</label>
+                                <input id="planPeriods" type="text" placeholder="Month 1, Month 2, ...">
+                            </div>
+                        </div>
+                        <button type="button" class="btn btn-primary" onclick="savePlan()">
+                            Save Plan
+                        </button>
+                        <span id="planStatus" class="save-status"></span>
+                    </div>
+                    <div class="settings-card">
+                        <h3>Rate List (PKR per unit, per road layer)</h3>
+                        <table class="boq-table" id="ratesTable">
+                            <thead>
+                                <tr>
+                                    <th style="text-align:left;">#</th>
+                                    <th style="text-align:left;">Road Layer</th>
+                                    <th style="text-align:left;">Unit</th>
+                                    <th style="text-align:right;">Rate</th>
+                                </tr>
+                            </thead>
+                            <tbody id="ratesTableBody"></tbody>
+                        </table>
+                        <div style="margin-top:12px;">
+                            <button type="button" class="btn btn-primary" onclick="saveRates()">
+                                Save Rates
+                            </button>
+                            <span id="ratesStatus" class="save-status"></span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <form id="uploadForm" enctype="multipart/form-data">
                 <!-- File Upload Section -->
                 <div class="upload-section">
@@ -1086,6 +1204,116 @@
 
         // Initialize animations when DOM is ready
         document.addEventListener('DOMContentLoaded', addAnimations);
+
+        // ----- Settings panel (rate list + project plan) -----
+
+        function toggleSettings() {
+            const body = document.getElementById('settingsBody');
+            const label = document.getElementById('settingsToggleLabel');
+            const open = body.style.display !== 'none';
+            body.style.display = open ? 'none' : 'block';
+            label.textContent = (open ? '⚙️ Project Plan & Rate List ▸'
+                                      : '⚙️ Project Plan & Rate List ▾');
+        }
+
+        async function loadSettings() {
+            try {
+                const [planRes, ratesRes] = await Promise.all([
+                    fetch('/api/plan').then(r => r.json()),
+                    fetch('/api/rates').then(r => r.json())
+                ]);
+                document.getElementById('planName').value = planRes.project_name || '';
+                document.getElementById('planCurrency').value = planRes.currency || 'PKR';
+                document.getElementById('planBudget').value = planRes.total_budget || 0;
+                document.getElementById('planPeriods').value =
+                    (planRes.period_labels || []).join(', ');
+                renderRatesTable(ratesRes.rates || []);
+            } catch (e) {
+                console.error('Failed to load settings:', e);
+            }
+        }
+
+        function renderRatesTable(rates) {
+            const tbody = document.getElementById('ratesTableBody');
+            tbody.innerHTML = '';
+            rates.forEach(r => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td>${r.class_id}</td>
+                    <td>${r.name}</td>
+                    <td>${r.unit}</td>
+                    <td style="text-align:right;">
+                        <input type="number" min="0" step="0.01" class="rate-input"
+                               data-class-id="${r.class_id}" value="${r.rate}">
+                    </td>`;
+                tbody.appendChild(tr);
+            });
+        }
+
+        async function savePlan() {
+            const statusEl = document.getElementById('planStatus');
+            statusEl.textContent = 'Saving...';
+            statusEl.style.color = '#555';
+            const periods = document.getElementById('planPeriods').value
+                .split(',').map(s => s.trim()).filter(Boolean);
+            const payload = {
+                project_name: document.getElementById('planName').value,
+                currency: document.getElementById('planCurrency').value || 'PKR',
+                total_budget: parseFloat(document.getElementById('planBudget').value) || 0,
+                period_labels: periods,
+                planned_cumulative: []
+            };
+            try {
+                const res = await fetch('/api/plan', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(payload)
+                });
+                const data = await res.json();
+                if (data.success) {
+                    statusEl.textContent = '✓ Saved';
+                    statusEl.style.color = '#27ae60';
+                } else {
+                    statusEl.textContent = '✗ ' + (data.error || 'Save failed');
+                    statusEl.style.color = '#c0392b';
+                }
+            } catch (e) {
+                statusEl.textContent = '✗ ' + e.message;
+                statusEl.style.color = '#c0392b';
+            }
+        }
+
+        async function saveRates() {
+            const statusEl = document.getElementById('ratesStatus');
+            statusEl.textContent = 'Saving...';
+            statusEl.style.color = '#555';
+            const inputs = document.querySelectorAll('#ratesTableBody .rate-input');
+            const rates = Array.from(inputs).map(i => ({
+                class_id: parseInt(i.dataset.classId, 10),
+                rate: parseFloat(i.value) || 0
+            }));
+            try {
+                const res = await fetch('/api/rates', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({rates: rates})
+                });
+                const data = await res.json();
+                if (data.success) {
+                    statusEl.textContent = '✓ Saved';
+                    statusEl.style.color = '#27ae60';
+                } else {
+                    statusEl.textContent = '✗ ' + (data.error || 'Save failed');
+                    statusEl.style.color = '#c0392b';
+                }
+            } catch (e) {
+                statusEl.textContent = '✗ ' + e.message;
+                statusEl.style.color = '#c0392b';
+            }
+        }
+
+        // Load settings on page load
+        loadSettings();
     </script>
 </body>
 </html>

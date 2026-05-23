@@ -22,6 +22,7 @@ from cost import build_boq
 from scurve import generate_planned_curve, build_scurve, render_scurve_png
 from progress import record_progress, actual_cumulative
 from report_excel import build_excel_report
+import config_store
 
 app = Flask(__name__)
 
@@ -103,21 +104,6 @@ logging.basicConfig(
 # Global Task Status Store
 task_status_store = {}
 
-
-def load_project_plan():
-    """Load the planned schedule from project_plan.json (owner-supplied)."""
-    try:
-        with open("project_plan.json") as f:
-            plan = json.load(f)
-    except Exception as e:
-        logging.warning(f"project_plan.json not loaded ({e}); using defaults")
-        plan = {}
-    plan.setdefault("project_name", "Road Construction Project")
-    plan.setdefault("currency", "PKR")
-    plan.setdefault("total_budget", 0)
-    plan.setdefault("period_labels", [])
-    plan.setdefault("planned_cumulative", [])
-    return plan
 
 class ConstructionVolumeAnalyzer:
     def __init__(self, task_id):
@@ -932,11 +918,12 @@ class ConstructionVolumeAnalyzer:
             {"layer": d.get("layer"), "confidence": round(d.get("confidence", 0), 3)}
             for d in self.detected_layers
         ]
-        report["boq"] = build_boq(volume_result, self.detected_layers)
+        plan = config_store.get_plan()
+        report["project_name"] = plan.get("project_name")
+        report["boq"] = build_boq(volume_result, self.detected_layers,
+                                  plan.get("currency", "PKR"))
 
         # S-curve: planned schedule vs accumulated actual progress
-        plan = load_project_plan()
-        report["project_name"] = plan.get("project_name")
         record_progress(self.task_id, report["boq"]["total_cost"], volume_result)
         planned = plan.get("planned_cumulative") or generate_planned_curve(
             plan.get("total_budget", 0), len(plan.get("period_labels", [])))
@@ -1199,6 +1186,42 @@ def configuration():
         except Exception as e:
             return jsonify({"error": f"Configuration update failed: {str(e)}"}), 500
 
+
+@app.route('/api/rates', methods=['GET', 'POST'])
+def api_rates():
+    """Get or update the user-editable unit-rate list (per road layer)."""
+    if request.method == 'GET':
+        return jsonify({
+            "currency": config_store.get_plan().get("currency", "PKR"),
+            "rates": config_store.rates_table(),
+        })
+    try:
+        body = request.get_json(force=True) or {}
+        incoming = body.get("rates")
+        if isinstance(incoming, list):
+            incoming = {item.get("class_id"): item.get("rate")
+                        for item in incoming if item.get("class_id") is not None}
+        config_store.save_rates(incoming or {})
+        return jsonify({"success": True, "rates": config_store.rates_table()})
+    except Exception as e:
+        logging.error(f"Saving rates failed: {e}")
+        return jsonify({"error": f"Failed to save rates: {e}"}), 500
+
+
+@app.route('/api/plan', methods=['GET', 'POST'])
+def api_plan():
+    """Get or update the user-editable project plan."""
+    if request.method == 'GET':
+        return jsonify(config_store.get_plan())
+    try:
+        plan = request.get_json(force=True) or {}
+        saved = config_store.save_plan(plan)
+        return jsonify({"success": True, "plan": saved})
+    except Exception as e:
+        logging.error(f"Saving plan failed: {e}")
+        return jsonify({"error": f"Failed to save plan: {e}"}), 500
+
+
 # Helper Functions
 def save_uploaded_files(files, prefix):
     """Save uploaded files and return paths"""
@@ -1249,12 +1272,16 @@ def detect_objects(image_path, prefix):
                 # loaded; otherwise fall back to the model's own class names.
                 if USING_ROAD_LAYER_MODEL:
                     label = layer_name(class_id)
+                    stored_class_id = class_id
                 else:
+                    # Generic (COCO) model - keep the label for display only;
+                    # do NOT attribute to a road-layer cost line.
                     label = result.names.get(class_id, f"class_{class_id}")
+                    stored_class_id = None
 
                 detections.append({
                     "layer": label,
-                    "class_id": class_id,
+                    "class_id": stored_class_id,
                     "confidence": confidence,
                     "bbox": [x1, y1, x2, y2],
                 })
