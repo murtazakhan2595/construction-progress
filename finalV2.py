@@ -67,6 +67,8 @@ WEBODM_AUTH = (
     os.environ.get("WEBODM_PASSWORD", "admin"),
 )
 PROJECT_ID = int(os.environ.get("WEBODM_PROJECT_ID", "1"))  # WebODM project ID
+# Max time (s) to wait for a WebODM task to finish - 6h covers most CPU runs.
+WEBODM_TASK_TIMEOUT = int(os.environ.get("WEBODM_TASK_TIMEOUT", "21600"))
 
 # CloudCompare Configuration - Updated paths for different OS
 CLOUDCOMPARE_PATHS = [
@@ -125,22 +127,34 @@ class ConstructionVolumeAnalyzer:
         }
         logging.info(f"Task {self.task_id}: {status} - {message} ({progress}%)")
 
-    def process_construction_analysis(self, before_paths, after_paths, gcp_path=None, options=None):
-        """Main processing pipeline for construction volume analysis"""
+    def process_construction_analysis(self, before_paths, after_paths, gcp_path=None,
+                                      options=None, before_task_id=None,
+                                      after_task_id=None):
+        """Main processing pipeline for construction volume analysis.
+
+        If before_task_id or after_task_id is supplied, the matching upload
+        step is skipped and the existing WebODM task is resumed (useful after
+        a Python-side timeout while WebODM kept processing in the background).
+        """
         try:
             if options:
                 self.processing_options.update(options)
-                
+
             self.before_images = before_paths
             self.after_images = after_paths
             self.gcp_file = gcp_path
-            
+
             # Step 1: Process Before Images
-            self.update_status("processing", 10, "Processing BEFORE images with WebODM")
-            before_task_id = self.submit_webodm_task("before", before_paths, gcp_path)
-            if not before_task_id:
-                raise Exception("Failed to submit BEFORE task to WebODM")
-                
+            if before_task_id:
+                self.update_status("processing", 10,
+                                    f"Resuming BEFORE WebODM task {before_task_id}")
+            else:
+                self.update_status("processing", 10,
+                                    "Processing BEFORE images with WebODM")
+                before_task_id = self.submit_webodm_task("before", before_paths, gcp_path)
+                if not before_task_id:
+                    raise Exception("Failed to submit BEFORE task to WebODM")
+
             if not self.wait_for_webodm_task(before_task_id):
                 raise Exception("BEFORE task failed in WebODM")
                 
@@ -150,12 +164,17 @@ class ConstructionVolumeAnalyzer:
             if not before_assets:
                 raise Exception("Failed to download BEFORE assets")
                 
-            # Step 3: Process After Images  
-            self.update_status("processing", 40, "Processing AFTER images with WebODM")
-            after_task_id = self.submit_webodm_task("after", after_paths, gcp_path)
-            if not after_task_id:
-                raise Exception("Failed to submit AFTER task to WebODM")
-                
+            # Step 3: Process After Images
+            if after_task_id:
+                self.update_status("processing", 40,
+                                    f"Resuming AFTER WebODM task {after_task_id}")
+            else:
+                self.update_status("processing", 40,
+                                    "Processing AFTER images with WebODM")
+                after_task_id = self.submit_webodm_task("after", after_paths, gcp_path)
+                if not after_task_id:
+                    raise Exception("Failed to submit AFTER task to WebODM")
+
             if not self.wait_for_webodm_task(after_task_id):
                 raise Exception("AFTER task failed in WebODM")
                 
@@ -271,8 +290,11 @@ class ConstructionVolumeAnalyzer:
                 except:
                     pass
 
-    def wait_for_webodm_task(self, task_id, timeout=3600):
-        """Wait for WebODM task completion with timeout"""
+    def wait_for_webodm_task(self, task_id, timeout=None):
+        """Wait for WebODM task completion with timeout (defaults to
+        WEBODM_TASK_TIMEOUT, 6h)."""
+        if timeout is None:
+            timeout = WEBODM_TASK_TIMEOUT
         url = f"{WEBODM_URL}/projects/{PROJECT_ID}/tasks/{task_id}/"
         start_time = time.time()
         
