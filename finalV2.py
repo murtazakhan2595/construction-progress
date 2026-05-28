@@ -1523,19 +1523,31 @@ def cleanup_old_files(max_age_hours=24):
 
 # Background cleanup task
 def start_cleanup_scheduler():
-    """Start background cleanup scheduler"""
+    """Start background cleanup scheduler.
+
+    DISABLED by default - it used to silently delete WebODM assets, DEMs and
+    analysis reports older than 24h, which destroys past results. Enable only
+    if you explicitly want auto-cleanup, via:
+        ENABLE_AUTO_CLEANUP=1   (and optionally CLEANUP_MAX_AGE_HOURS=720)
+    """
+    if os.environ.get("ENABLE_AUTO_CLEANUP", "0") not in ("1", "true", "True"):
+        logging.info("Auto-cleanup disabled (set ENABLE_AUTO_CLEANUP=1 to enable)")
+        return
+
+    max_age = int(os.environ.get("CLEANUP_MAX_AGE_HOURS", "720"))  # 30 days
+
     def cleanup_worker():
         while True:
             try:
-                cleanup_old_files(max_age_hours=24)
+                cleanup_old_files(max_age_hours=max_age)
                 time.sleep(3600)  # Run every hour
             except Exception as e:
                 logging.error(f"Cleanup scheduler error: {e}")
                 time.sleep(3600)
-    
+
     cleanup_thread = threading.Thread(target=cleanup_worker, daemon=True)
     cleanup_thread.start()
-    logging.info("Cleanup scheduler started")
+    logging.info(f"Cleanup scheduler started (max age {max_age}h)")
 
 if __name__ == '__main__':
     # Verify dependencies
