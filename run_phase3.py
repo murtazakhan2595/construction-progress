@@ -42,10 +42,19 @@ def main():
                         help="Use every Nth BEFORE image (default 1 = all)")
     parser.add_argument("--after-step", type=int, default=1,
                         help="Use every Nth AFTER image (default 1 = all)")
+    parser.add_argument("--before-limit", type=int, default=0,
+                        help="Use only the first N (consecutive) BEFORE images")
+    parser.add_argument("--after-limit", type=int, default=0,
+                        help="Use only the first N (consecutive) AFTER images")
     args = parser.parse_args()
 
     before = collect(BEFORE_DIR)[::max(1, args.before_step)]
     after = collect(AFTER_DIR)[::max(1, args.after_step)]
+    # Consecutive subset keeps image overlap intact (needed for photogrammetry)
+    if args.before_limit:
+        before = before[:args.before_limit]
+    if args.after_limit:
+        after = after[:args.after_limit]
     print(f"Before: {len(before)} images from {BEFORE_DIR}")
     print(f"After:  {len(after)} images from {AFTER_DIR}")
     if not before or not after:

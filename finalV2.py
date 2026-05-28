@@ -184,41 +184,31 @@ class ConstructionVolumeAnalyzer:
             if not after_assets:
                 raise Exception("Failed to download AFTER assets")
                 
-            # Step 5: Generate Meshes from Point Clouds (Fixed)
-            self.update_status("processing", 70, "Generating meshes from point clouds")
-            before_mesh = self.generate_mesh_from_pointcloud_fixed(before_assets["pointcloud"], "before")
-            after_mesh = self.generate_mesh_from_pointcloud_fixed(after_assets["pointcloud"], "after")
-            
-            if not before_mesh or not after_mesh:
-                # Fallback: Try alternative mesh generation
-                before_mesh = self.generate_mesh_alternative(before_assets["pointcloud"], "before")
-                after_mesh = self.generate_mesh_alternative(after_assets["pointcloud"], "after")
-                
-            if not before_mesh or not after_mesh:
-                raise Exception("Failed to generate meshes")
-                
-            # Step 6: Generate DEMs from Meshes (Fixed)
-            self.update_status("processing", 80, "Generating Digital Elevation Models")
-            before_dem = self.generate_dem_from_mesh_fixed(before_mesh, "before")
-            after_dem = self.generate_dem_from_mesh_fixed(after_mesh, "after")
-            
-            # Fallback: Generate DEMs directly from point clouds if mesh method fails
-            if not before_dem:
-                before_dem = self.generate_dem_from_pointcloud_direct(before_assets["pointcloud"], "before")
-            if not after_dem:
-                after_dem = self.generate_dem_from_pointcloud_direct(after_assets["pointcloud"], "after")
-            
-            if not before_dem or not after_dem:
-                raise Exception("Failed to generate DEMs")
-                
-            # Step 7: Calculate Volume Difference
-            self.update_status("processing", 90, "Calculating volume difference")
-            volume_result = self.calculate_volume_difference(before_dem, after_dem, before_assets, after_assets)
-            
+            # Step 5: Calculate volume difference.
+            # WebODM already produces DSM elevation rasters - use them directly
+            # via the geo-aware calc. Only fall back to building a DEM from the
+            # point cloud (CloudCompare) if a DSM is unavailable.
+            self.update_status("processing", 85, "Computing volume difference from DSMs")
+            if before_assets.get("dsm") and after_assets.get("dsm"):
+                volume_result = self.calculate_volume_from_dems(
+                    before_assets["dsm"], after_assets["dsm"])
+            else:
+                logging.info("DSM missing; falling back to point-cloud DEM generation")
+                before_dem = (before_assets.get("dsm")
+                              or self.generate_dem_from_pointcloud_direct(
+                                  before_assets["pointcloud"], "before"))
+                after_dem = (after_assets.get("dsm")
+                             or self.generate_dem_from_pointcloud_direct(
+                                 after_assets["pointcloud"], "after"))
+                if not before_dem or not after_dem:
+                    raise Exception("Failed to generate DEMs")
+                volume_result = self.calculate_volume_difference(
+                    before_dem, after_dem, before_assets, after_assets)
+
             if volume_result is None:
                 raise Exception("Volume calculation failed")
-                
-            # Step 8: Generate Report
+
+            # Step 6: Generate Report
             self.update_status("processing", 95, "Generating analysis report")
             report = self.generate_analysis_report(volume_result, before_assets, after_assets)
             
@@ -389,23 +379,29 @@ class ConstructionVolumeAnalyzer:
         }
         
         for asset_type, filename in asset_files.items():
+            output_path = os.path.join(DOWNLOAD_FOLDER, f"{phase}_{task_id}_{filename}")
+
+            # Skip download if we already have a non-empty copy on disk
+            if os.path.exists(output_path) and os.path.getsize(output_path) > 0:
+                assets[asset_type] = output_path
+                logging.info(f"Reusing existing {phase} {asset_type}: {output_path}")
+                continue
+
             try:
                 url = f"{WEBODM_URL}/projects/{PROJECT_ID}/tasks/{task_id}/download/{filename}"
-                output_path = os.path.join(DOWNLOAD_FOLDER, f"{phase}_{task_id}_{filename}")
-                
-                response = requests.get(url, auth=WEBODM_AUTH, stream=True, timeout=300)
-                
+                response = requests.get(url, auth=WEBODM_AUTH, stream=True, timeout=600)
+
                 if response.status_code == 200:
                     with open(output_path, "wb") as f:
                         for chunk in response.iter_content(chunk_size=8192):
                             if chunk:
                                 f.write(chunk)
-                    
+
                     assets[asset_type] = output_path
                     logging.info(f"Downloaded {phase} {asset_type}: {output_path}")
                 else:
                     logging.warning(f"Could not download {asset_type} for {phase}: {response.status_code}")
-                    
+
             except Exception as e:
                 logging.error(f"Error downloading {asset_type} for {phase}: {e}")
         
@@ -683,9 +679,72 @@ class ConstructionVolumeAnalyzer:
             return None
 
     def calculate_volume_from_dems(self, before_dem, after_dem):
-        """Calculate volume using DEM raster arithmetic with enhanced error handling"""
+        """Calculate volume using DEM raster arithmetic.
+
+        Tries rasterio first (Windows-friendly, installed by default), then
+        legacy GDAL, then CloudCompare's 2.5D volume tool as a last resort.
+        """
+        # --- Preferred: rasterio, geo-aware and memory-safe (default on Win) -
+        # Aligns the two DSMs by real-world coordinates and computes the volume
+        # only over their geographic overlap, reprojecting both onto a common
+        # grid capped in size so multi-GB DSMs never blow up memory.
+        # Local numpy alias avoids the function-wide UnboundLocalError from the
+        # inner `import numpy as np` in the GDAL fallback below.
         try:
-            # Try GDAL method first (most accurate)
+            import numpy as np_
+            import rasterio
+            from rasterio.warp import reproject, Resampling, transform_bounds
+            from rasterio.transform import from_bounds as _from_bounds
+
+            with rasterio.open(before_dem) as bds, rasterio.open(after_dem) as ads:
+                # After bounds expressed in Before's CRS
+                a_bounds = ads.bounds
+                if ads.crs and bds.crs and ads.crs != bds.crs:
+                    a_bounds = transform_bounds(ads.crs, bds.crs, *ads.bounds)
+                b = bds.bounds
+                left, right = max(b.left, a_bounds[0]), min(b.right, a_bounds[2])
+                bottom, top = max(b.bottom, a_bounds[1]), min(b.top, a_bounds[3])
+                if left >= right or bottom >= top:
+                    raise Exception("Before/After DSMs have no geographic overlap")
+
+                # Common grid over the overlap, capped to 2500 px per side
+                base_res = max(abs(bds.transform.a), abs(bds.transform.e))
+                res = max(base_res, (right - left) / 2500, (top - bottom) / 2500)
+                width = max(1, int((right - left) / res))
+                height = max(1, int((top - bottom) / res))
+                dst_transform = _from_bounds(left, bottom, right, top, width, height)
+                cell_area = res * res
+                NODATA = -9999.0
+
+                b_grid = np_.full((height, width), NODATA, dtype="float32")
+                a_grid = np_.full((height, width), NODATA, dtype="float32")
+                for src, dst in ((bds, b_grid), (ads, a_grid)):
+                    reproject(
+                        source=rasterio.band(src, 1), destination=dst,
+                        src_transform=src.transform, src_crs=src.crs or bds.crs,
+                        dst_transform=dst_transform, dst_crs=bds.crs,
+                        src_nodata=src.nodata, dst_nodata=NODATA,
+                        resampling=Resampling.bilinear,
+                    )
+
+                valid = (b_grid != NODATA) & (a_grid != NODATA)
+                valid &= np_.isfinite(b_grid) & np_.isfinite(a_grid)
+                diff = a_grid.astype("float64") - b_grid.astype("float64")
+                diff[~valid] = 0.0
+                volume = float(diff.sum()) * cell_area
+                logging.info(
+                    f"rasterio volume (geo-aware): {volume:.3f} m^3, cell "
+                    f"{res:.3f} m, grid {width}x{height}, overlap cells "
+                    f"{int(valid.sum())}/{valid.size}"
+                )
+                return volume
+        except ImportError:
+            logging.info("rasterio not installed; trying GDAL...")
+        except Exception as e:
+            logging.warning(f"rasterio volume calc failed ({e}); trying GDAL...")
+
+        try:
+            # Legacy GDAL path (only if rasterio missing / failed)
             try:
                 import gdal
                 import numpy as np
