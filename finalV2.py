@@ -42,7 +42,11 @@ for folder in [UPLOAD_FOLDER, RESULTS_FOLDER, DOWNLOAD_FOLDER, POINT_CLOUD_FOLDE
 # YOLOv8 model for road-layer detection.
 # Set the YOLO_MODEL_PATH environment variable to the custom-trained road-layer
 # model when it is ready; until then it falls back to the generic yolov8n.pt.
-YOLO_MODEL_PATH = os.environ.get("YOLO_MODEL_PATH", "yolov8n.pt")
+_BUNDLED_MODEL = os.path.join(os.path.dirname(os.path.abspath(__file__)), "models", "best.pt")
+YOLO_MODEL_PATH = os.environ.get(
+    "YOLO_MODEL_PATH",
+    _BUNDLED_MODEL if os.path.exists(_BUNDLED_MODEL) else "yolov8n.pt",
+)
 YOLO_CONFIDENCE = float(os.environ.get("YOLO_CONFIDENCE", "0.25"))
 try:
     model = YOLO(YOLO_MODEL_PATH)
