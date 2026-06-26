@@ -6,6 +6,120 @@
 
 ---
 
+## 0. LATEST UPDATE — 2026-06-26 (custom YOLO model TRAINED)
+
+The biggest open item (custom road-layer detector) is now **DONE**. The
+Gemini-Vision alternative (old §11) is **abandoned** — not needed.
+
+**Model:** `YOLO26s-seg` (instance segmentation, Ultralytics 8.4.78), trained
+on the friend's (Engr. Zafar Khan's) RTX 3070 Ti Laptop GPU, 100 epochs (~22 min).
+
+**Dataset:** Roboflow `engrs-workspace-bvswe / construction-progress-monitoring-ejrwd`,
+version 3, exported in `yolo26` (segmentation) format. 422 images, 70/30 split
+(295 train / 127 val), 3 classes.
+
+**Classes (data.yaml order — DO NOT reorder):**
+| ID | Name |
+|----|------|
+| 0 | Aggregate Base Course |
+| 1 | Asphalt |
+| 2 | Sub Base |
+
+**Validation metrics (best.pt):**
+| Class | Mask mAP50 | Mask mAP50-95 |
+|-------|-----------|---------------|
+| all | 0.961 | 0.847 |
+| Aggregate Base Course | 0.978 | 0.899 |
+| Asphalt | 0.990 | 0.952 |
+| Sub Base | 0.913 | 0.689 |
+
+Sub Base is the weakest (most instances, hardest to delineate) but usable.
+Inference ~4–13 ms/image.
+
+**Where it lives / how it loads:**
+- Trained weights on Zafar's machine: `D:\Construction Progress Monitoring Yolo Trained\runs\segment\roadlayers\run1\weights\best.pt` (also backed up as `roadlayers_best.pt`).
+- App expects it at `construction_progress\models\best.pt` — **auto-loaded** (no env var needed); falls back to generic YOLO if absent. `YOLO_MODEL_PATH` still overrides.
+
+**Code changes made:**
+- `road_layers.py` — collapsed from 12 layers to the 3 classes above (IDs match data.yaml). Rates are still PKR placeholders; replace with real BOQ.
+- `finalV2.py` — `YOLO_MODEL_PATH` now defaults to `models\best.pt` when present.
+- The app already auto-detects a road-layer model via `len(model.names) == NUM_CLASSES` (now 3), so detection flips to real layer names + BOQ attribution automatically.
+
+**Training environment recipe (Zafar's machine, for reference):** Python 3.12
+venv; `torch 2.6.0+cu124` (downloaded via resumable `curl` due to flaky net),
+`torchvision 0.21.0+cu124`, `ultralytics 8.4.78`. Train cmd:
+`yolo segment train model=yolo26s-seg.pt data=...\data.yaml epochs=100 imgsz=640 batch=-1 patience=20 device=0`.
+
+**Current focus:** feed the freshly-generated DSMs (see §0.1) through the app's
+volume → BOQ → S-curve pipeline, verify end-to-end, then hand over.
+
+---
+
+## 0.1 LATEST UPDATE — 2026-06-27 (WebODM DSMs generated on GPU)
+
+All photogrammetry for the new dataset is DONE — produced on Zafar's RTX 3070 Ti.
+
+### The real dataset structure (corrected)
+The new survey is NOT one before/after pair. On Zafar's machine at
+`D:\Master's Data\Masters Research Work\Drone Data\Data Simulation\` there are
+**3 layer folders, each with Before + After**:
+
+| Folder | Before (Jun 19) | After (Jun 24) |
+|--------|-----------------|----------------|
+| `Asphalt (SubBase)` | 46 | 45 |
+| `Asphalt (ABC)` | 62 | 62 |
+| `Asphalt (Prime Coat)` | 62 | 60 |
+
+Filenames embed the date: **all "Before" = 20260619, all "After" = 20260624**.
+So it's **one site, two flights, split into 3 sub-areas by layer** — i.e. **3
+independent before→after volume measurements** over the same 5-day window, NOT a
+cumulative time-chain (the dates contradict a SubBase→ABC→PrimeCoat sequence).
+Same physical area confirmed within each pair. Images are huge: 12288×6912 (~55 MB each).
+
+### WebODM on Windows — GPU is NOT supported via webodm.sh
+`./webodm.sh --gpu` prints **"GPU support is not available for Windows"** and
+silently falls back to CPU. The working approach (and what we used):
+- Confirmed Docker GPU passthrough: `docker run --rm --gpus all nvidia/cuda:12.4.0-base-ubuntu22.04 nvidia-smi` shows the card.
+- Ran a **standalone GPU NodeODM** container:
+  `docker run -d --gpus all --name nodeodm-gpu -p 40001:3000 opendronemap/nodeodm:gpu`
+- Registered it in WebODM as a processing node → **node id 2**, `host.docker.internal:40001`, online.
+- Submit tasks pinned to it: `processing_node=2, auto_processing_node=false`.
+- CPU run took forever + OOM'd; GPU run = ~8 min each. ✅
+
+### Environment (Zafar's machine)
+- WebODM **3.2.6** cloned at `...\Data Simulation\WebODM` (path has spaces+apostrophe but worked). Started via `& "C:\Program Files\Git\bin\bash.exe" webodm.sh start`.
+- `.wslconfig`: `memory=26GB`, `swap=24GB` (machine has 32 GB).
+- WebODM project **"construction progress" = id 2**; admin/admin.
+- ODM (node) version **3.5.6**.
+
+### OOM lesson → memory-safe options (USE THESE for big images)
+`pc-quality: high` OOM'd at 85% even at 24 GB on the 84 MP images. Working options:
+`feature-quality: medium`, `pc-quality: medium`, `resize-to: 2048`,
+`max-concurrency: 4`, `dsm: true`, `dtm: true`, `dem-resolution: 5`,
+`orthophoto-resolution: 5` (resolutions are in **cm/px**; the old app value `0.1` was wrong units, though GSD-capped).
+
+### Outputs
+All 6 tasks COMPLETED on GPU. DSMs (+DTMs) downloaded to `dsm_outputs\` and
+zipped as `dsm_outputs.zip` (~3 MB total — small because resize-to 2048 coarsened
+GSD; valid GeoTIFFs). The 3 pairs for the volume step:
+- `SubBase_Before_gpu_dsm.tif` ↔ `SubBase_After_dsm.tif`
+- `ABC_Before_dsm.tif` ↔ `ABC_After_dsm.tif`
+- `PrimeCoat_Before_dsm.tif` ↔ `PrimeCoat_After_dsm.tif`
+
+### Helper scripts created on Zafar's machine (reusable)
+- `submit_webodm.py <folder> <name> <project_id> <node_id>` — uploads w/ progress bar, memory-safe options, pins to GPU node.
+- `webodm_status.py <pid> <task_id>` — polls one task.
+- `status_all.py` — snapshot of all tasks in project 2.
+- `download_dsm.py` — downloads dsm.tif+dtm.tif for every DONE task into `dsm_outputs\`.
+
+### Next steps
+1. Transfer `dsm_outputs.zip` + `best.pt` to the app machine (`d:\temp\zapru\...\construction_progress`); best.pt → `models\best.pt`.
+2. Run each of the 3 before/after pairs through `process_existing_data` (or the UI "Use Existing 3D Data") → 3 volume deltas.
+3. Verify YOLO detects the 3 layers + BOQ + S-curve + Excel.
+4. Demo prep (3 saved runs → S-curve) and final handover to Zafar's machine.
+
+---
+
 ## 1. Who & what
 
 **Project owner:** Rozi Khan (MS thesis student). His thesis title:
@@ -372,7 +486,7 @@ AFTER = 20-image consecutive subset (covers a small subregion).
 
 | Item | Owner | Notes |
 |---|---|---|
-| Trained YOLO road-layer model (`best.pt`) | Friend (Rozi), ~next month | Until then BOQ collapses to "Earthwork (unclassified)". Drop in via `YOLO_MODEL_PATH`. **User is now considering Gemini Vision as a faster alternative — see §11.** |
+| ~~Trained YOLO road-layer model (`best.pt`)~~ | ✅ DONE 2026-06-26 | YOLO26s-seg, 3 classes, mAP50 0.96. See §0. Gemini alternative abandoned. |
 | Real unit rates | Friend | Placeholders are realistic PKR; editable in Settings. |
 | Real project plan | Friend | Sample "N-25 Highway" plan in place; editable in Settings. |
 | Full 161-image AFTER run | Us, on friend's beefier machine | We have a 20-image subset. Friend has GPU + more RAM. |
@@ -433,11 +547,11 @@ disk). Plan to:
 
 ## 12. Honest limitations / caveats for the next AI
 
-- **YOLO is decorative until a road-layer model arrives** — generic COCO
-  detections show but `class_id` is forced to `None` in
-  `detect_objects()`, so the BOQ shows one "Earthwork (unclassified)" line
-  at the default rate. This is intentional — it prevents falsely mapping
-  COCO class 7 ("truck") to road-layer class 7 ("Allied Kerb Stone").
+- **YOLO is now LIVE** (as of 2026-06-26, §0) — the custom YOLO26s-seg model
+  is trained and wired in. With `models\best.pt` present the app detects the
+  3 real layers and attributes the BOQ to them. Without it, the old fallback
+  still applies: generic COCO detections show but `class_id` is forced to
+  `None`, so the BOQ shows one "Earthwork (unclassified)" line.
 - **Current volume is a 20-image patch**, not the full site. The full
   161-image AFTER WebODM run kept crashing this laptop (we fixed the
   underlying issues but never re-ran the full set). Friend's machine is the
