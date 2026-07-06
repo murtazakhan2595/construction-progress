@@ -1,1462 +1,1000 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Construction Volume Analysis</title>
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-        
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            min-height: 100vh;
-            padding: 20px;
-        }
-        
-        .container {
-            max-width: 1200px;
-            margin: 0 auto;
-            background: white;
-            border-radius: 15px;
-            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
-            overflow: hidden;
-        }
-        
-        .header {
-            background: linear-gradient(135deg, #2c3e50, #34495e);
-            color: white;
-            padding: 30px;
-            text-align: center;
-        }
-        
-        .header h1 {
-            font-size: 2.5rem;
-            margin-bottom: 10px;
-        }
-        
-        .header p {
-            font-size: 1.1rem;
-            opacity: 0.9;
-        }
-        
-        .content {
-            padding: 40px;
-        }
-        
-        .upload-section {
-            margin-bottom: 40px;
-        }
-        
-        .section-title {
-            font-size: 1.5rem;
-            color: #2c3e50;
-            margin-bottom: 20px;
-            padding-bottom: 10px;
-            border-bottom: 2px solid #3498db;
-        }
-        
-        .file-upload-group {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 30px;
-            margin-bottom: 30px;
-        }
-        
-        .file-upload {
-            border: 2px dashed #3498db;
-            border-radius: 10px;
-            padding: 30px;
-            text-align: center;
-            transition: all 0.3s ease;
-            cursor: pointer;
-        }
-        
-        .file-upload:hover {
-            border-color: #2980b9;
-            background-color: #f8f9fa;
-            transform: translateY(-2px);
-        }
-        
-        .file-upload.active {
-            border-color: #27ae60;
-            background-color: #d5edda;
-        }
-        
-        .file-upload h3 {
-            color: #2c3e50;
-            margin-bottom: 15px;
-            font-size: 1.2rem;
-        }
-        
-        .file-upload input[type="file"] {
-            display: none;
-        }
-        
-        .upload-icon {
-            font-size: 3rem;
-            color: #3498db;
-            margin-bottom: 15px;
-        }
-        
-        .file-list {
-            margin-top: 15px;
-            text-align: left;
-        }
-        
-        .file-item {
-            background: #f1f2f6;
-            padding: 8px 12px;
-            margin: 5px 0;
-            border-radius: 5px;
-            font-size: 0.9rem;
-        }
-        
-        .options-section {
-            background: #f8f9fa;
-            padding: 30px;
-            border-radius: 10px;
-            margin-bottom: 30px;
-        }
-        
-        .options-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-            gap: 20px;
-        }
-        
-        .option-group {
-            display: flex;
-            flex-direction: column;
-        }
-        
-        .option-group label {
-            font-weight: 600;
-            color: #2c3e50;
-            margin-bottom: 8px;
-        }
-        
-        .option-group select,
-        .option-group input {
-            padding: 10px;
-            border: 2px solid #ddd;
-            border-radius: 5px;
-            font-size: 1rem;
-        }
-        
-        .option-group select:focus,
-        .option-group input:focus {
-            border-color: #3498db;
-            outline: none;
-        }
-        
-        .gcp-upload {
-            background: #fff3cd;
-            border: 2px dashed #ffc107;
-            border-radius: 10px;
-            padding: 20px;
-            text-align: center;
-            margin-bottom: 30px;
-        }
-        
-        .gcp-upload.has-file {
-            background: #d1ecf1;
-            border-color: #17a2b8;
-        }
-        
-        .button-group {
-            display: flex;
-            gap: 15px;
-            justify-content: center;
-            flex-wrap: wrap;
-        }
-        
-        .btn {
-            padding: 15px 30px;
-            border: none;
-            border-radius: 8px;
-            font-size: 1.1rem;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-        }
-        
-        .btn-primary {
-            background: linear-gradient(135deg, #3498db, #2980b9);
-            color: white;
-        }
-        
-        .btn-primary:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 5px 15px rgba(52, 152, 219, 0.4);
-        }
-        
-        .btn-primary:disabled {
-            background: #bdc3c7;
-            cursor: not-allowed;
-            transform: none;
-            box-shadow: none;
-        }
-        
-        .btn-secondary {
-            background: #95a5a6;
-            color: white;
-        }
-        
-        .btn-secondary:hover {
-            background: #7f8c8d;
-        }
-        
-        .progress-container {
-            display: none;
-            background: white;
-            border-radius: 10px;
-            padding: 30px;
-            margin-top: 30px;
-            border-left: 5px solid #3498db;
-        }
-        
-        .progress-bar {
-            width: 100%;
-            height: 20px;
-            background: #ecf0f1;
-            border-radius: 10px;
-            overflow: hidden;
-            margin: 20px 0;
-        }
-        
-        .progress-fill {
-            height: 100%;
-            background: linear-gradient(90deg, #3498db, #2980b9);
-            width: 0%;
-            transition: width 0.5s ease;
-            border-radius: 10px;
-        }
-        
-        .progress-text {
-            text-align: center;
-            font-weight: 600;
-            color: #2c3e50;
-            margin-bottom: 10px;
-        }
-        
-        .status-message {
-            text-align: center;
-            font-size: 1rem;
-            color: #7f8c8d;
-        }
-        
-        .results-container {
-            display: none;
-            background: #d5edda;
-            border: 2px solid #27ae60;
-            border-radius: 10px;
-            padding: 30px;
-            margin-top: 30px;
-        }
-        
-        .results-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-            gap: 20px;
-            margin-bottom: 20px;
-        }
-        
-        .result-card {
-            background: white;
-            padding: 20px;
-            border-radius: 8px;
-            text-align: center;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-        }
-        
-        .result-value {
-            font-size: 2rem;
-            font-weight: bold;
-            color: #27ae60;
-            margin: 10px 0;
-        }
-        
-        .result-label {
-            color: #7f8c8d;
-            font-size: 0.9rem;
-        }
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Construction Volume Analysis</title>
 
-        .boq-table {
-            width: 100%;
-            border-collapse: collapse;
-            background: white;
-            border-radius: 8px;
-            overflow: hidden;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-        }
+  <!-- Tailwind (CDN — fine for first pass; compile for production) -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Icons: Lucide -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <!-- Type: Geist + Geist Mono -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 
-        .boq-table th {
-            background: #2c3e50;
-            color: white;
-            padding: 12px;
-            font-size: 0.9rem;
-        }
-
-        .boq-table td {
-            padding: 10px 12px;
-            border-bottom: 1px solid #ecf0f1;
-            font-size: 0.9rem;
-        }
-
-        .boq-table tfoot td {
-            background: #f8f9fa;
-            border-top: 2px solid #2c3e50;
-        }
-
-        .settings-section {
-            background: #f8f9fa;
-            border-radius: 10px;
-            margin-bottom: 30px;
-            border: 1px solid #e0e0e0;
-        }
-        .settings-toggle {
-            width: 100%;
-            background: #2c3e50;
-            color: white;
-            border: none;
-            padding: 14px 20px;
-            text-align: left;
-            font-size: 1rem;
-            font-weight: 600;
-            cursor: pointer;
-            border-radius: 10px 10px 0 0;
-        }
-        .settings-body { padding: 18px; }
-        .settings-card {
-            background: white;
-            padding: 18px;
-            border-radius: 8px;
-            margin-bottom: 16px;
-            box-shadow: 0 1px 4px rgba(0,0,0,0.05);
-        }
-        .settings-card h3 {
-            margin: 0 0 12px 0;
-            color: #2c3e50;
-            font-size: 1.05rem;
-        }
-        .form-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 12px;
-            margin-bottom: 12px;
-        }
-        .form-grid label {
-            display: block;
-            font-size: 0.8rem;
-            color: #555;
-            margin-bottom: 4px;
-            font-weight: 600;
-        }
-        .form-grid input {
-            width: 100%;
-            padding: 8px;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-            font-size: 0.95rem;
-        }
-        .save-status {
-            margin-left: 12px;
-            font-size: 0.85rem;
-            color: #27ae60;
-        }
-        .rate-input {
-            width: 100px;
-            padding: 4px 8px;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-            text-align: right;
-        }
-
-        .mode-selector {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 14px;
-            margin-bottom: 24px;
-        }
-        .mode-option {
-            border: 2px solid #ddd;
-            border-radius: 10px;
-            padding: 14px 18px;
-            cursor: pointer;
-            transition: all 0.2s ease;
-            background: white;
-        }
-        .mode-option.selected {
-            border-color: #3498db;
-            background: #ebf3fb;
-        }
-        .mode-option strong { color: #2c3e50; }
-        .mode-option .desc {
-            color: #7f8c8d;
-            font-size: 0.85rem;
-            margin-top: 4px;
-        }
-        .mode-option input { margin-right: 8px; }
-        @media (max-width: 600px) {
-            .mode-selector { grid-template-columns: 1fr; }
-        }
-        
-        .error-message {
-            background: #f8d7da;
-            color: #721c24;
-            padding: 15px;
-            border-radius: 5px;
-            margin-top: 20px;
-            border-left: 5px solid #dc3545;
-        }
-        
-        .detection-preview {
-            display: none;
-            margin-top: 20px;
-            text-align: center;
-        }
-        
-        .detection-images {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 20px;
-            margin-top: 15px;
-        }
-        
-        .detection-images img {
-            max-width: 100%;
-            border-radius: 8px;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-        }
-        
-        .checkbox-group {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            margin: 20px 0;
-        }
-        
-        .checkbox-group input[type="checkbox"] {
-            transform: scale(1.2);
-        }
-        
-        @media (max-width: 768px) {
-            .file-upload-group {
-                grid-template-columns: 1fr;
-            }
-            
-            .options-grid {
-                grid-template-columns: 1fr;
-            }
-            
-            .detection-images {
-                grid-template-columns: 1fr;
-            }
-            
-            .header h1 {
-                font-size: 2rem;
-            }
-            
-            .content {
-                padding: 20px;
-            }
-        }
-    </style>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ["Geist", "system-ui", "sans-serif"],
+            mono: ["Geist Mono", "ui-monospace", "monospace"],
+          },
+          borderRadius: { DEFAULT: "4px", md: "4px", lg: "6px", xl: "8px" },
+          colors: { brand: { DEFAULT: "#2563eb", dark: "#1d4ed8", light: "#eff6ff" } },
+        },
+      },
+    };
+  </script>
+  <style>
+    body { font-family: "Geist", system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+    .mono { font-family: "Geist Mono", ui-monospace, monospace; }
+    .tnum { font-variant-numeric: tabular-nums; }
+    ::selection { background: #bfdbfe; }
+    /* focus ring */
+    .field:focus { outline: none; border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37,99,235,0.15); }
+    /* spinner */
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .spin { animation: spin 0.7s linear infinite; }
+    /* top navigation loading bar */
+    @keyframes navslide { 0% { transform: translateX(-100%); } 100% { transform: translateX(400%); } }
+    .navslide { animation: navslide 1s ease-in-out infinite; }
+    /* skeleton shimmer */
+    @keyframes shimmer { 100% { background-position: -200% 0; } }
+    .skel { background: linear-gradient(90deg,#f1f5f9 25%,#e2e8f0 37%,#f1f5f9 63%); background-size: 200% 100%; animation: shimmer 1.4s ease infinite; }
+    /* scrollbar for file lists */
+    .filelist::-webkit-scrollbar { width: 8px; }
+    .filelist::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 999px; }
+    [x-cloak] { display: none !important; }
+  </style>
 </head>
-<body>
-    <div class="container">
-        <div class="header">
-            <h1>🏗️ Construction Volume Analysis</h1>
-            <p>Advanced earthwork and construction change detection using photogrammetry</p>
-            <p style="margin-top:10px;">
-                <a href="/runs" style="color:#a5b4fc;text-decoration:none;font-size:0.95rem;">
-                    📋 Past Analyses
-                </a>
-            </p>
-        </div>
-        
-        <div class="content">
-            <!-- Settings panel (collapsible) -->
-            <div class="settings-section">
-                <button type="button" class="settings-toggle" onclick="toggleSettings()">
-                    <span id="settingsToggleLabel">⚙️ Project Plan &amp; Rate List ▸</span>
-                </button>
-                <div id="settingsBody" class="settings-body" style="display:none;">
-                    <div class="settings-card">
-                        <h3>Project Plan</h3>
-                        <div class="form-grid">
-                            <div>
-                                <label for="planName">Project Name</label>
-                                <input id="planName" type="text">
-                            </div>
-                            <div>
-                                <label for="planCurrency">Currency</label>
-                                <input id="planCurrency" type="text" placeholder="PKR">
-                            </div>
-                            <div>
-                                <label for="planBudget">Total Budget</label>
-                                <input id="planBudget" type="number" min="0">
-                            </div>
-                            <div>
-                                <label for="planPeriods">Period Labels (comma-separated)</label>
-                                <input id="planPeriods" type="text" placeholder="Month 1, Month 2, ...">
-                            </div>
-                        </div>
-                        <button type="button" class="btn btn-primary" onclick="savePlan()">
-                            Save Plan
-                        </button>
-                        <span id="planStatus" class="save-status"></span>
-                    </div>
-                    <div class="settings-card">
-                        <h3>Rate List (PKR per unit, per road layer)</h3>
-                        <table class="boq-table" id="ratesTable">
-                            <thead>
-                                <tr>
-                                    <th style="text-align:left;">#</th>
-                                    <th style="text-align:left;">Road Layer</th>
-                                    <th style="text-align:left;">Unit</th>
-                                    <th style="text-align:right;">Rate</th>
-                                </tr>
-                            </thead>
-                            <tbody id="ratesTableBody"></tbody>
-                        </table>
-                        <div style="margin-top:12px;">
-                            <button type="button" class="btn btn-primary" onclick="saveRates()">
-                                Save Rates
-                            </button>
-                            <span id="ratesStatus" class="save-status"></span>
-                        </div>
-                    </div>
-                </div>
-            </div>
+<body class="bg-slate-50 text-slate-900">
 
-            <form id="uploadForm" enctype="multipart/form-data">
-                <!-- File Upload Section -->
-                <div class="upload-section">
-                    <h2 class="section-title">📸 Upload Data</h2>
+  <!-- top navigation loading bar (shown on internal navigation) -->
+  <div id="navLoader" class="pointer-events-none fixed inset-x-0 top-0 z-50 h-0.5 overflow-hidden opacity-0 transition-opacity duration-150">
+    <div class="navslide h-full w-1/4 rounded-full bg-brand"></div>
+  </div>
 
-                    <div class="mode-selector">
-                        <label class="mode-option selected" id="modeOptFresh">
-                            <input type="radio" name="mode" value="fresh" checked onchange="updateMode()">
-                            <strong>Start Fresh</strong>
-                            <div class="desc">Raw drone images → photogrammetry → volume (hours)</div>
-                        </label>
-                        <label class="mode-option" id="modeOptExisting">
-                            <input type="radio" name="mode" value="existing" onchange="updateMode()">
-                            <strong>Use Existing 3D Data</strong>
-                            <div class="desc">Pre-computed DSM .tif files → straight to volume (seconds)</div>
-                        </label>
-                    </div>
+  <!-- ============================ NAV ============================ -->
+  <nav class="sticky top-0 z-30 border-b border-slate-200 bg-white/85 backdrop-blur">
+    <div class="mx-auto flex h-[60px] max-w-[1120px] items-center justify-between px-6 md:px-8">
+      <a href="/" class="flex items-center gap-2.5">
+        <span class="flex h-7 w-7 items-center justify-center rounded bg-brand">
+          <i data-lucide="mountain-snow" class="h-4 w-4 text-white"></i>
+        </span>
+        <span class="text-[15px] font-bold tracking-tight">Construction Volume Analysis</span>
+      </a>
+      <div class="flex items-center gap-5 text-sm font-medium">
+        <a href="/app" class="text-brand">New Analysis</a>
+        <a href="/runs" class="text-slate-500 hover:text-slate-900">Past Analyses</a>
+        <span id="healthDot" class="mono flex items-center gap-1.5 rounded-full border border-slate-200 px-2.5 py-1 text-xs text-slate-500">
+          <span id="healthLed" class="h-1.5 w-1.5 rounded-full bg-slate-300"></span>
+          <span id="healthText">checking…</span>
+        </span>
+      </div>
+    </div>
+  </nav>
 
-                    <div id="freshUploads">
-                        <div class="file-upload-group">
-                            <div class="file-upload" onclick="document.getElementById('beforeImages').click()">
-                                <div class="upload-icon">📤</div>
-                                <h3>Before Images</h3>
-                                <p>Upload images from before construction</p>
-                                <input type="file" id="beforeImages" name="before_images" multiple accept="image/*">
-                                <div class="file-list" id="beforeFileList"></div>
-                            </div>
+  <main class="mx-auto max-w-[1120px] px-6 pb-24 pt-8 md:px-8">
 
-                            <div class="file-upload" onclick="document.getElementById('afterImages').click()">
-                                <div class="upload-icon">📤</div>
-                                <h3>After Images</h3>
-                                <p>Upload images from after construction</p>
-                                <input type="file" id="afterImages" name="after_images" multiple accept="image/*">
-                                <div class="file-list" id="afterFileList"></div>
-                            </div>
-                        </div>
-                    </div>
+    <!-- ===================== HEALTH WARNING BANNERS ===================== -->
+    <div id="healthBanners" class="mb-6 flex flex-col gap-3"></div>
 
-                    <div id="existingUploads" style="display:none;">
-                        <div class="file-upload-group">
-                            <div class="file-upload" onclick="document.getElementById('beforeDsm').click()">
-                                <div class="upload-icon">🗺️</div>
-                                <h3>Before DSM</h3>
-                                <p>Pre-computed DSM .tif from the before survey</p>
-                                <input type="file" id="beforeDsm" name="before_dsm" accept=".tif,.tiff">
-                                <div class="file-list" id="beforeDsmName"></div>
-                            </div>
-
-                            <div class="file-upload" onclick="document.getElementById('afterDsm').click()">
-                                <div class="upload-icon">🗺️</div>
-                                <h3>After DSM</h3>
-                                <p>Pre-computed DSM .tif from the after survey</p>
-                                <input type="file" id="afterDsm" name="after_dsm" accept=".tif,.tiff">
-                                <div class="file-list" id="afterDsmName"></div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                
-                <!-- Ground Control Points -->
-                <div class="gcp-upload" onclick="document.getElementById('gcpFile').click()">
-                    <h3>🎯 Ground Control Points (Optional)</h3>
-                    <p>Upload GCP file for improved accuracy</p>
-                    <input type="file" id="gcpFile" name="gcp_file" accept=".txt,.csv">
-                    <div id="gcpFileName" style="margin-top: 10px; font-weight: bold;"></div>
-                </div>
-                
-                <!-- Processing Options -->
-                <div class="options-section">
-                    <h2 class="section-title">⚙️ Processing Options</h2>
-                    
-                    <div class="options-grid">
-                        <div class="option-group">
-                            <label for="demResolution">DEM Resolution (meters/pixel):</label>
-                            <input type="number" id="demResolution" name="dem_resolution" value="0.1" min="0.01" max="1.0" step="0.01">
-                        </div>
-                        
-                        <div class="option-group">
-                            <label for="meshResolution">Mesh Quality:</label>
-                            <select id="meshResolution" name="mesh_resolution">
-                                <option value="high">High Quality (Slower)</option>
-                                <option value="medium" selected>Medium Quality</option>
-                                <option value="low">Low Quality (Faster)</option>
-                            </select>
-                        </div>
-                        
-                        <div class="option-group">
-                            <label for="volumeMethod">Volume Calculation Method:</label>
-                            <select id="volumeMethod" name="volume_method">
-                                <option value="dem_diff" selected>DEM Difference (Recommended)</option>
-                                <option value="mesh_diff">Mesh Comparison</option>
-                                <option value="point_cloud_diff">Point Cloud Comparison</option>
-                            </select>
-                        </div>
-                    </div>
-                    
-                    <div class="checkbox-group">
-                        <input type="checkbox" id="enableDetection" name="enable_detection">
-                        <label for="enableDetection">Enable object detection preview</label>
-                    </div>
-                </div>
-                
-                <!-- Submit Button -->
-                <div class="button-group">
-                    <button type="submit" class="btn btn-primary" id="analyzeBtn">
-                        🚀 Start Analysis
-                    </button>
-                    <button type="button" class="btn btn-secondary" onclick="resetForm()">
-                        🔄 Reset
-                    </button>
-                </div>
-            </form>
-            
-            <!-- Progress Section -->
-            <div class="progress-container" id="progressContainer">
-                <div class="progress-text" id="progressText">Initializing...</div>
-                <div class="progress-bar">
-                    <div class="progress-fill" id="progressFill"></div>
-                </div>
-                <div class="status-message" id="statusMessage">Please wait while we process your images...</div>
-            </div>
-            
-            <!-- Results Section -->
-            <div class="results-container" id="resultsContainer">
-                <h2 class="section-title">📊 Analysis Results</h2>
-                <div class="results-grid" id="resultsGrid">
-                    <!-- Results will be populated here -->
-                </div>
-                <div id="boqContainer"></div>
-                <div id="scurveContainer"></div>
-                <div class="button-group">
-                    <button type="button" class="btn btn-primary" onclick="downloadExcel()">
-                        📊 Excel Report
-                    </button>
-                    <button type="button" class="btn btn-primary" onclick="downloadReport()">
-                        📥 Download Report
-                    </button>
-                    <button type="button" class="btn btn-secondary" onclick="viewAssets()">
-                        🗂️ View Assets
-                    </button>
-                </div>
-            </div>
-            
-            <!-- Detection Preview -->
-            <div class="detection-preview" id="detectionPreview">
-                <h3>Object Detection Preview</h3>
-                <div class="detection-images">
-                    <div>
-                        <h4>Before</h4>
-                        <img id="beforeDetection" alt="Before detection">
-                    </div>
-                    <div>
-                        <h4>After</h4>
-                        <img id="afterDetection" alt="After detection">
-                    </div>
-                </div>
-            </div>
-            
-            <!-- Error Messages -->
-            <div id="errorContainer"></div>
-        </div>
+    <!-- ===================== READ-ONLY NOTICE ===================== -->
+    <div id="readonlyNotice" class="mb-6 hidden items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white px-5 py-3">
+      <div class="flex items-center gap-3">
+        <a href="/runs" class="inline-flex items-center gap-1.5 text-sm font-medium text-slate-500 hover:text-slate-900">
+          <i data-lucide="arrow-left" class="h-4 w-4"></i> Past Analyses
+        </a>
+        <span class="h-4 w-px bg-slate-200"></span>
+        <span class="rounded border border-slate-200 bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-600">Read-only</span>
+        <span class="text-sm text-slate-600">Viewing a past analysis.</span>
+      </div>
+      <a href="/app" class="inline-flex items-center gap-2 rounded border border-slate-300 bg-white px-3.5 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">
+        <i data-lucide="plus" class="h-4 w-4"></i> New Analysis
+      </a>
     </div>
 
-    <script>
-        let currentTaskId = null;
-        let progressInterval = null;
+    <!-- ===================== PAGE HEADER ===================== -->
+    <header id="pageHeader" class="mb-8">
+      <h1 class="text-3xl font-extrabold tracking-tight md:text-[34px]">Earthwork volume analysis</h1>
+      <p class="mt-1.5 max-w-2xl text-[15px] leading-relaxed text-slate-500">Earthwork &amp; road-layer progress monitoring from drone photogrammetry.</p>
+    </header>
 
-        // File upload handlers
-        document.getElementById('beforeImages').addEventListener('change', function(e) {
-            handleFileSelection(e.target, 'beforeFileList', 'before-upload');
-        });
+    <!-- =================================================================== -->
+    <!-- WORKSPACE (hidden in read-only mode)                                -->
+    <!-- =================================================================== -->
+    <div id="workspace">
 
-        document.getElementById('afterImages').addEventListener('change', function(e) {
-            handleFileSelection(e.target, 'afterFileList', 'after-upload');
-        });
+      <!-- ============ SECTION A — CONFIGURATION ============ -->
+      <section class="mb-6 overflow-hidden rounded-xl border border-slate-200 bg-white">
+        <button id="cfgToggle" class="flex w-full items-center justify-between px-6 py-4 text-left">
+          <span class="flex items-center gap-2.5">
+            <i data-lucide="settings-2" class="h-4.5 w-4.5 text-slate-500"></i>
+            <span class="font-semibold">Project plan &amp; rate list</span>
+            <span class="text-sm text-slate-400">— defaults that drive the cost math</span>
+          </span>
+          <i id="cfgChevron" data-lucide="chevron-down" class="h-5 w-5 text-slate-400 transition-transform"></i>
+        </button>
 
-        document.getElementById('gcpFile').addEventListener('change', function(e) {
-            const file = e.target.files[0];
-            const fileName = document.getElementById('gcpFileName');
-            const container = document.querySelector('.gcp-upload');
-            
-            if (file) {
-                fileName.textContent = `📁 ${file.name}`;
-                container.classList.add('has-file');
-            } else {
-                fileName.textContent = '';
-                container.classList.remove('has-file');
-            }
-        });
-
-        function handleFileSelection(input, listId, uploadType) {
-            const fileList = document.getElementById(listId);
-            const container = input.closest('.file-upload');
-            
-            fileList.innerHTML = '';
-            
-            if (input.files.length > 0) {
-                container.classList.add('active');
-                Array.from(input.files).forEach((file, index) => {
-                    const fileItem = document.createElement('div');
-                    fileItem.className = 'file-item';
-                    fileItem.textContent = `${index + 1}. ${file.name}`;
-                    fileList.appendChild(fileItem);
-                });
-            } else {
-                container.classList.remove('active');
-            }
-        }
-
-        // Mode toggle (Start Fresh / Use Existing 3D Data)
-        function updateMode() {
-            const mode = document.querySelector('input[name="mode"]:checked').value;
-            const isExisting = mode === 'existing';
-            document.getElementById('freshUploads').style.display = isExisting ? 'none' : 'block';
-            document.getElementById('existingUploads').style.display = isExisting ? 'block' : 'none';
-            document.querySelector('.gcp-upload').style.display = isExisting ? 'none' : 'block';
-            document.querySelector('.options-section').style.display = isExisting ? 'none' : 'block';
-            document.getElementById('modeOptFresh').classList.toggle('selected', !isExisting);
-            document.getElementById('modeOptExisting').classList.toggle('selected', isExisting);
-        }
-
-        // DSM file-pick display
-        ['beforeDsm', 'afterDsm'].forEach(id => {
-            const inp = document.getElementById(id);
-            inp.addEventListener('change', function() {
-                const nameEl = document.getElementById(id + 'Name');
-                const container = inp.closest('.file-upload');
-                nameEl.innerHTML = '';
-                if (this.files[0]) {
-                    const mb = (this.files[0].size / 1024 / 1024).toFixed(1);
-                    nameEl.innerHTML = `<div class="file-item">${this.files[0].name} (${mb} MB)</div>`;
-                    container.classList.add('active');
-                } else {
-                    container.classList.remove('active');
-                }
-            });
-        });
-
-        // Form submission
-        document.getElementById('uploadForm').addEventListener('submit', async function(e) {
-            e.preventDefault();
-            const mode = document.querySelector('input[name="mode"]:checked').value;
-            if (mode === 'existing') {
-                return submitExistingMode();
-            }
-
-            const formData = new FormData();
-
-            // Add files
-            const beforeFiles = document.getElementById('beforeImages').files;
-            const afterFiles = document.getElementById('afterImages').files;
-            const gcpFile = document.getElementById('gcpFile').files[0];
-            
-            if (beforeFiles.length === 0 || afterFiles.length === 0) {
-                showError('Please select both before and after images');
-                return;
-            }
-            
-            // Add images
-            Array.from(beforeFiles).forEach(file => {
-                formData.append('before_images', file);
-            });
-            
-            Array.from(afterFiles).forEach(file => {
-                formData.append('after_images', file);
-            });
-            
-            // Add GCP file if selected
-            if (gcpFile) {
-                formData.append('gcp_file', gcpFile);
-            }
-            
-            // Add options
-            formData.append('dem_resolution', document.getElementById('demResolution').value);
-            formData.append('mesh_resolution', document.getElementById('meshResolution').value);
-            formData.append('volume_method', document.getElementById('volumeMethod').value);
-            formData.append('enable_detection', document.getElementById('enableDetection').checked);
-            
-            try {
-                // Disable form and show progress
-                document.getElementById('analyzeBtn').disabled = true;
-                document.getElementById('progressContainer').style.display = 'block';
-                document.getElementById('resultsContainer').style.display = 'none';
-                clearError();
-                
-                // Submit form
-                const response = await fetch('/upload', {
-                    method: 'POST',
-                    body: formData
-                });
-                
-                const result = await response.json();
-                
-                if (result.success) {
-                    currentTaskId = result.task_id;
-                    
-                    // Show detection results if available
-                    if (result.detection_results) {
-                        showDetectionPreview(result.detection_results);
-                    }
-                    
-                    // Start progress monitoring
-                    startProgressMonitoring();
-                    
-                } else {
-                    showError(result.error || 'Upload failed');
-                    document.getElementById('analyzeBtn').disabled = false;
-                    document.getElementById('progressContainer').style.display = 'none';
-                }
-                
-            } catch (error) {
-                showError('Network error: ' + error.message);
-                document.getElementById('analyzeBtn').disabled = false;
-                document.getElementById('progressContainer').style.display = 'none';
-            }
-        });
-
-        async function submitExistingMode() {
-            const before = document.getElementById('beforeDsm').files[0];
-            const after = document.getElementById('afterDsm').files[0];
-            if (!before || !after) {
-                showError('Please select both before and after DSM files');
-                return;
-            }
-            const fd = new FormData();
-            fd.append('before_dsm', before);
-            fd.append('after_dsm', after);
-            document.getElementById('analyzeBtn').disabled = true;
-            document.getElementById('progressContainer').style.display = 'block';
-            document.getElementById('resultsContainer').style.display = 'none';
-            clearError();
-            try {
-                const res = await fetch('/upload-existing', { method: 'POST', body: fd });
-                const data = await res.json();
-                if (data.success) {
-                    currentTaskId = data.task_id;
-                    startProgressMonitoring();
-                } else {
-                    showError(data.error || 'Upload failed');
-                    document.getElementById('analyzeBtn').disabled = false;
-                    document.getElementById('progressContainer').style.display = 'none';
-                }
-            } catch (err) {
-                showError('Network error: ' + err.message);
-                document.getElementById('analyzeBtn').disabled = false;
-                document.getElementById('progressContainer').style.display = 'none';
-            }
-        }
-
-        // Progress monitoring
-        function startProgressMonitoring() {
-            if (!currentTaskId) return;
-            
-            progressInterval = setInterval(async () => {
-                try {
-                    const response = await fetch(`/status/${currentTaskId}`);
-                    const status = await response.json();
-                    
-                    updateProgress(status);
-                    
-                    if (status.status === 'completed') {
-                        clearInterval(progressInterval);
-                        await loadResults();
-                    } else if (status.status === 'failed') {
-                        clearInterval(progressInterval);
-                        showError(status.message || 'Processing failed');
-                        resetUI();
-                    }
-                    
-                } catch (error) {
-                    console.error('Error checking status:', error);
-                }
-            }, 2000); // Check every 2 seconds
-        }
-
-        function updateProgress(status) {
-            const progressFill = document.getElementById('progressFill');
-            const progressText = document.getElementById('progressText');
-            const statusMessage = document.getElementById('statusMessage');
-            
-            const progress = status.progress || 0;
-            const message = status.message || 'Processing...';
-            
-            progressFill.style.width = progress + '%';
-            progressText.textContent = `${progress}% Complete`;
-            statusMessage.textContent = message;
-            
-            // Add some visual feedback
-            if (progress > 0 && progress < 100) {
-                progressFill.style.background = 'linear-gradient(90deg, #3498db, #2980b9)';
-            } else if (progress === 100) {
-                progressFill.style.background = 'linear-gradient(90deg, #27ae60, #2ecc71)';
-            }
-        }
-
-        // Load and display results
-        async function loadResults() {
-            try {
-                const response = await fetch(`/results/${currentTaskId}`);
-                const results = await response.json();
-                
-                if (response.ok) {
-                    displayResults(results);
-                } else {
-                    showError(results.error || 'Failed to load results');
-                    resetUI();
-                }
-                
-            } catch (error) {
-                showError('Failed to load results: ' + error.message);
-                resetUI();
-            }
-        }
-
-        function displayResults(results) {
-            const resultsContainer = document.getElementById('resultsContainer');
-            const resultsGrid = document.getElementById('resultsGrid');
-            const progressContainer = document.getElementById('progressContainer');
-            
-            // Hide progress, show results
-            progressContainer.style.display = 'none';
-            resultsContainer.style.display = 'block';
-            
-            // Clear previous results
-            resultsGrid.innerHTML = '';
-            
-            // Volume change (main result)
-            const volumeCard = createResultCard(
-                'Volume Change',
-                `${results.volume_change_m3?.toFixed(2) || '0.00'} m³`,
-                `${(results.volume_change_yd3 || 0).toFixed(2)} yd³`
-            );
-            resultsGrid.appendChild(volumeCard);
-            
-            // Analysis details
-            if (results.analysis) {
-                const analysis = results.analysis;
-                
-                if (analysis.cut_volume > 0) {
-                    const cutCard = createResultCard(
-                        'Material Removed',
-                        `${analysis.cut_volume.toFixed(2)} m³`,
-                        'Excavation/Cut'
-                    );
-                    resultsGrid.appendChild(cutCard);
-                }
-                
-                if (analysis.fill_volume > 0) {
-                    const fillCard = createResultCard(
-                        'Material Added',
-                        `${analysis.fill_volume.toFixed(2)} m³`,
-                        'Fill/Construction'
-                    );
-                    resultsGrid.appendChild(fillCard);
-                }
-                
-                const interpretationCard = createResultCard(
-                    'Interpretation',
-                    analysis.interpretation,
-                    'Analysis Summary'
-                );
-                resultsGrid.appendChild(interpretationCard);
-            }
-            
-            // Processing info
-            const processingCard = createResultCard(
-                'Processing Time',
-                new Date(results.timestamp).toLocaleString(),
-                `Task ID: ${results.task_id.substring(0, 8)}...`
-            );
-            resultsGrid.appendChild(processingCard);
-
-            // Bill of Quantities table
-            renderBOQ(results.boq);
-
-            // S-curve chart
-            renderScurve(results);
-
-            // Reset analyze button
-            document.getElementById('analyzeBtn').disabled = false;
-        }
-
-        function renderScurve(results) {
-            const container = document.getElementById('scurveContainer');
-            container.innerHTML = '';
-            if (!results.scurve_image) return;
-            const s = (results.scurve && results.scurve.summary) || {};
-            let summary = '';
-            if (s.status) {
-                summary = `<p style="color:#7f8c8d;">Status: <b>${s.status}</b>` +
-                    ` &nbsp;|&nbsp; Performance index: <b>${s.performance_index}</b></p>`;
-            }
-            container.innerHTML = `
-                <h3 style="margin:25px 0 10px;color:#2c3e50;">📈 Project S-Curve</h3>
-                ${summary}
-                <img src="${results.scurve_image}" style="max-width:100%;border-radius:8px;
-                     box-shadow:0 2px 10px rgba(0,0,0,0.1);">`;
-        }
-
-        function renderBOQ(boq) {
-            const container = document.getElementById('boqContainer');
-            container.innerHTML = '';
-            if (!boq || !boq.items || boq.items.length === 0) return;
-
-            let rows = '';
-            boq.items.forEach(item => {
-                rows += `<tr>
-                    <td>${item.layer}</td>
-                    <td style="text-align:right;">${item.quantity.toLocaleString()}</td>
-                    <td>${item.unit}</td>
-                    <td style="text-align:right;">${item.rate.toLocaleString()}</td>
-                    <td style="text-align:right;">${item.amount.toLocaleString()}</td>
-                </tr>`;
-            });
-
-            container.innerHTML = `
-                <h3 style="margin:25px 0 10px;color:#2c3e50;">💰 Bill of Quantities</h3>
-                <table class="boq-table">
-                    <thead><tr>
-                        <th style="text-align:left;">Road Layer</th>
-                        <th style="text-align:right;">Quantity</th>
-                        <th style="text-align:left;">Unit</th>
-                        <th style="text-align:right;">Rate (${boq.currency})</th>
-                        <th style="text-align:right;">Amount (${boq.currency})</th>
-                    </tr></thead>
-                    <tbody>${rows}</tbody>
-                    <tfoot><tr>
-                        <td colspan="4" style="text-align:right;font-weight:bold;">TOTAL</td>
-                        <td style="text-align:right;font-weight:bold;">${boq.currency} ${boq.total_cost.toLocaleString()}</td>
-                    </tr></tfoot>
-                </table>`;
-        }
-
-        function createResultCard(title, value, subtitle) {
-            const card = document.createElement('div');
-            card.className = 'result-card';
-            
-            card.innerHTML = `
-                <h3>${title}</h3>
-                <div class="result-value">${value}</div>
-                <div class="result-label">${subtitle}</div>
-            `;
-            
-            return card;
-        }
-
-        function showDetectionPreview(detectionResults) {
-            const preview = document.getElementById('detectionPreview');
-            const beforeImg = document.getElementById('beforeDetection');
-            const afterImg = document.getElementById('afterDetection');
-            
-            if (detectionResults.before && detectionResults.before.image) {
-                beforeImg.src = detectionResults.before.image;
-            }
-
-            if (detectionResults.after && detectionResults.after.image) {
-                afterImg.src = detectionResults.after.image;
-            }
-            
-            preview.style.display = 'block';
-        }
-
-        // Utility functions
-        function showError(message) {
-            const errorContainer = document.getElementById('errorContainer');
-            errorContainer.innerHTML = `
-                <div class="error-message">
-                    ❌ ${message}
+        <div id="cfgBody" class="hidden border-t border-slate-200 p-6">
+          <div class="grid gap-6 lg:grid-cols-2">
+            <!-- Project Plan -->
+            <div>
+              <h3 class="mb-4 text-sm font-semibold text-slate-500">Project plan</h3>
+              <div class="grid gap-4">
+                <label class="block">
+                  <span class="mb-1.5 block text-[13px] font-medium text-slate-700">Project name</span>
+                  <input id="planName" type="text" class="field w-full rounded border border-slate-300 px-3 py-2 text-sm" placeholder="e.g. N-25 Highway (Phase 1)">
+                </label>
+                <div class="grid grid-cols-2 gap-4">
+                  <label class="block">
+                    <span class="mb-1.5 block text-[13px] font-medium text-slate-700">Currency</span>
+                    <input id="planCurrency" type="text" class="field mono w-full rounded border border-slate-300 px-3 py-2 text-sm" value="PKR">
+                  </label>
+                  <label class="block">
+                    <span class="mb-1.5 block text-[13px] font-medium text-slate-700">Total budget</span>
+                    <input id="planBudget" type="number" class="field mono w-full rounded border border-slate-300 px-3 py-2 text-sm" placeholder="50000000">
+                  </label>
                 </div>
-            `;
-        }
+                <label class="block">
+                  <span class="mb-1.5 block text-[13px] font-medium text-slate-700">Period labels</span>
+                  <input id="planPeriods" type="text" class="field w-full rounded border border-slate-300 px-3 py-2 text-sm" placeholder="Month 1, Month 2, Month 3">
+                  <span class="mt-1 block text-xs text-slate-400">Comma-separated. Used for the planned S-curve.</span>
+                </label>
+                <div class="flex items-center gap-3">
+                  <button id="savePlan" class="inline-flex items-center gap-2 rounded bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-brand-dark">
+                    <i data-lucide="save" class="h-4 w-4"></i> Save plan
+                  </button>
+                  <span id="planStatus" class="text-sm"></span>
+                </div>
+              </div>
+            </div>
 
-        function clearError() {
-            document.getElementById('errorContainer').innerHTML = '';
-        }
+            <!-- Rate list -->
+            <div>
+              <h3 class="mb-4 text-sm font-semibold text-slate-500">Rate list</h3>
+              <div class="overflow-hidden rounded-lg border border-slate-200">
+                <table class="w-full text-sm">
+                  <thead>
+                    <tr class="border-b border-slate-200 bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                      <th class="px-4 py-2.5">#</th>
+                      <th class="px-4 py-2.5">Road layer</th>
+                      <th class="px-4 py-2.5">Unit</th>
+                      <th class="px-4 py-2.5 text-right">Rate</th>
+                    </tr>
+                  </thead>
+                  <tbody id="ratesBody" class="tnum divide-y divide-slate-100"></tbody>
+                </table>
+              </div>
+              <div class="mt-4 flex items-center gap-3">
+                <button id="saveRates" class="inline-flex items-center gap-2 rounded bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-brand-dark">
+                  <i data-lucide="save" class="h-4 w-4"></i> Save rates
+                </button>
+                <span id="ratesStatus" class="text-sm"></span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
 
-        function resetUI() {
-            document.getElementById('analyzeBtn').disabled = false;
-            document.getElementById('progressContainer').style.display = 'none';
-        }
+      <!-- ============ SECTION B — DATA INPUT ============ -->
+      <section class="mb-6 rounded-xl border border-slate-200 bg-white p-6">
+        <h2 class="mb-1 text-lg font-semibold">Data input</h2>
+        <p class="mb-5 text-sm text-slate-500">Choose how you want to compute the earthwork volume.</p>
 
-        function resetForm() {
-            // Reset form
-            document.getElementById('uploadForm').reset();
-            
-            // Clear file lists
-            document.getElementById('beforeFileList').innerHTML = '';
-            document.getElementById('afterFileList').innerHTML = '';
-            document.getElementById('gcpFileName').textContent = '';
-            
-            // Remove active classes
-            document.querySelectorAll('.file-upload').forEach(el => {
-                el.classList.remove('active');
-            });
-            document.querySelector('.gcp-upload').classList.remove('has-file');
-            
-            // Hide containers
-            document.getElementById('progressContainer').style.display = 'none';
-            document.getElementById('resultsContainer').style.display = 'none';
-            document.getElementById('detectionPreview').style.display = 'none';
-            
-            // Clear error messages
-            clearError();
-            
-            // Reset global variables
-            currentTaskId = null;
-            if (progressInterval) {
-                clearInterval(progressInterval);
-                progressInterval = null;
-            }
-            
-            // Enable analyze button
-            document.getElementById('analyzeBtn').disabled = false;
-        }
+        <!-- Mode toggle -->
+        <div class="mb-6 grid gap-3 sm:grid-cols-2">
+          <button data-mode="fresh" class="modeCard rounded-lg border p-4 text-left transition">
+            <div class="flex items-center gap-2.5">
+              <i data-lucide="plane" class="h-5 w-5"></i>
+              <span class="font-semibold">Start Fresh</span>
+            </div>
+            <p class="mt-1.5 text-[13px] text-slate-500">Raw drone images → photogrammetry → volume. Minutes to hours.</p>
+          </button>
+          <button data-mode="existing" class="modeCard rounded-lg border p-4 text-left transition">
+            <div class="flex items-center gap-2.5">
+              <i data-lucide="box" class="h-5 w-5"></i>
+              <span class="font-semibold">Use Existing 3D Data</span>
+            </div>
+            <p class="mt-1.5 text-[13px] text-slate-500">Pre-computed DSM <span class="mono">.tif</span> → straight to volume. ~1 minute.</p>
+          </button>
+        </div>
 
-        // Download functions
-        function downloadExcel() {
-            if (!currentTaskId) {
-                showError('No analysis results available');
-                return;
-            }
-            window.location = `/report-excel/${currentTaskId}`;
-        }
+        <!-- ===== FRESH MODE ===== -->
+        <div id="freshInputs">
+          <div class="grid gap-4 sm:grid-cols-2">
+            <div data-dz="before_images" data-multi="1" data-accept="image/*"></div>
+            <div data-dz="after_images" data-multi="1" data-accept="image/*"></div>
+          </div>
+          <div class="mt-4">
+            <div data-dz="gcp_file" data-multi="0" data-accept=".txt,.csv"></div>
+          </div>
 
-        async function downloadReport() {
-            if (!currentTaskId) {
-                showError('No analysis results available');
-                return;
-            }
-            
-            try {
-                const response = await fetch(`/download/${currentTaskId}/report`);
-                
-                if (response.ok) {
-                    const blob = await response.blob();
-                    const url = window.URL.createObjectURL(blob);
-                    const a = document.createElement('a');
-                    a.href = url;
-                    a.download = `construction_analysis_report_${currentTaskId.substring(0, 8)}.json`;
-                    a.click();
-                    window.URL.revokeObjectURL(url);
-                } else {
-                    showError('Failed to download report');
-                }
-                
-            } catch (error) {
-                showError('Download error: ' + error.message);
-            }
-        }
+          <!-- Processing options -->
+          <div class="mt-6 rounded-lg border border-slate-200 bg-slate-50/60 p-5">
+            <h3 class="mb-4 flex items-center gap-2 text-sm font-semibold text-slate-600">
+              <i data-lucide="sliders-horizontal" class="h-4 w-4"></i> Processing options
+            </h3>
+            <div class="grid gap-4 sm:grid-cols-3">
+              <label class="block">
+                <span class="mb-1.5 block text-[13px] font-medium text-slate-700">DEM resolution</span>
+                <div class="relative">
+                  <input id="demResolution" type="number" step="0.01" class="field mono w-full rounded border border-slate-300 bg-white px-3 py-2 text-sm" value="0.1">
+                  <span class="mono pointer-events-none absolute right-3 top-2.5 text-xs text-slate-400">m/px</span>
+                </div>
+              </label>
+              <label class="block">
+                <span class="mb-1.5 block text-[13px] font-medium text-slate-700">Mesh quality</span>
+                <div class="relative">
+                  <select id="meshResolution" class="field w-full appearance-none rounded border border-slate-300 bg-white px-3 py-2 text-sm">
+                    <option value="high">High</option>
+                    <option value="medium" selected>Medium</option>
+                    <option value="low">Low</option>
+                  </select>
+                  <i data-lucide="chevron-down" class="pointer-events-none absolute right-2.5 top-2.5 h-4 w-4 text-slate-400"></i>
+                </div>
+              </label>
+              <label class="block">
+                <span class="mb-1.5 block text-[13px] font-medium text-slate-700">Volume method</span>
+                <div class="relative">
+                  <select id="volumeMethod" class="field w-full appearance-none rounded border border-slate-300 bg-white px-3 py-2 text-sm">
+                    <option value="dem_diff" selected>DEM difference</option>
+                    <option value="mesh_diff">Mesh comparison</option>
+                    <option value="point_cloud_diff">Point cloud comparison</option>
+                  </select>
+                  <i data-lucide="chevron-down" class="pointer-events-none absolute right-2.5 top-2.5 h-4 w-4 text-slate-400"></i>
+                </div>
+              </label>
+            </div>
+            <label class="mt-4 flex w-fit cursor-pointer items-center gap-2.5 text-sm text-slate-700">
+              <input id="enableDetection" type="checkbox" checked class="peer sr-only">
+              <span class="flex h-[18px] w-[18px] items-center justify-center rounded border border-slate-300 bg-white peer-checked:border-brand peer-checked:bg-brand">
+                <i data-lucide="check" class="h-3 w-3 text-white"></i>
+              </span>
+              Enable object detection preview
+            </label>
+          </div>
+        </div>
 
-        function viewAssets() {
-            if (!currentTaskId) {
-                showError('No analysis results available');
-                return;
-            }
-            
-            // Create modal or new window to show available assets
-            const assetsWindow = window.open('', '_blank', 'width=800,height=600');
-            assetsWindow.document.write(`
-                <html>
-                    <head>
-                        <title>Analysis Assets - ${currentTaskId.substring(0, 8)}</title>
-                        <style>
-                            body { font-family: Arial, sans-serif; padding: 20px; }
-                            .asset-link { display: block; margin: 10px 0; padding: 10px; background: #f1f2f6; text-decoration: none; border-radius: 5px; }
-                            .asset-link:hover { background: #ddd; }
-                        </style>
-                    </head>
-                    <body>
-                        <h2>Analysis Assets</h2>
-                        <p>Task ID: ${currentTaskId}</p>
-                        
-                        <h3>Available Downloads:</h3>
-                        <a href="/download/${currentTaskId}/report" class="asset-link">📊 Analysis Report (JSON)</a>
-                        <a href="/download/${currentTaskId}/before_dem" class="asset-link">🗺️ Before DEM (TIFF)</a>
-                        <a href="/download/${currentTaskId}/after_dem" class="asset-link">🗺️ After DEM (TIFF)</a>
-                        <a href="/download/${currentTaskId}/before_mesh" class="asset-link">🔺 Before Mesh (PLY)</a>
-                        <a href="/download/${currentTaskId}/after_mesh" class="asset-link">🔺 After Mesh (PLY)</a>
-                        
-                        <h3>Instructions:</h3>
-                        <p>• DEM files can be opened in QGIS, ArcGIS, or other GIS software</p>
-                        <p>• Mesh files can be viewed in CloudCompare, MeshLab, or Blender</p>
-                        <p>• Report contains detailed analysis data in JSON format</p>
-                        
-                        <button onclick="window.close()" style="margin-top: 20px; padding: 10px 20px;">Close</button>
-                    </body>
-                </html>
-            `);
-        }
+        <!-- ===== EXISTING MODE ===== -->
+        <div id="existingInputs" class="hidden">
+          <div class="grid gap-4 sm:grid-cols-2">
+            <div data-dz="before_dsm" data-multi="0" data-accept=".tif,.tiff"></div>
+            <div data-dz="after_dsm" data-multi="0" data-accept=".tif,.tiff"></div>
+          </div>
+        </div>
 
-        // Health check on page load
-        window.addEventListener('load', async function() {
-            try {
-                const response = await fetch('/health');
-                const health = await response.json();
-                
-                if (!health.services.webodm) {
-                    showError('⚠️ Warning: WebODM service not available. Please ensure WebODM is running.');
-                }
-                
-                if (!health.services.cloudcompare) {
-                    showError('⚠️ Warning: CloudCompare not found. Please install CloudCompare.');
-                }
-                
-                console.log('System health:', health);
-                
-            } catch (error) {
-                console.error('Health check failed:', error);
-            }
+        <!-- Actions -->
+        <div class="mt-6 flex items-center gap-3">
+          <button id="startBtn" class="inline-flex items-center gap-2 rounded bg-brand px-5 py-2.5 text-sm font-semibold text-white hover:bg-brand-dark disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400">
+            <i data-lucide="play" class="h-4 w-4"></i> Start Analysis
+          </button>
+          <button id="resetBtn" class="rounded border border-slate-300 bg-white px-5 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50">Reset</button>
+          <span id="inputError" class="text-sm text-red-600"></span>
+        </div>
+      </section>
+
+      <!-- ============ SECTION C — PROCESSING ============ -->
+      <section id="processing" class="mb-6 hidden rounded-xl border border-slate-200 bg-white p-6">
+        <!-- stepper -->
+        <div id="stepper" class="mb-7 flex items-center"></div>
+        <!-- bar -->
+        <div class="flex items-center justify-between">
+          <span id="procMsg" class="text-sm text-slate-600">Starting…</span>
+          <span id="procPct" class="mono text-sm font-semibold text-brand">0%</span>
+        </div>
+        <div class="mt-2 h-2 overflow-hidden rounded-full bg-slate-100">
+          <div id="procBar" class="h-full rounded-full bg-brand transition-all duration-500" style="width:0%"></div>
+        </div>
+      </section>
+
+    </div><!-- /workspace -->
+
+    <!-- ============ AI DETECTION (can appear during processing OR results) ============ -->
+    <section id="detection" class="mb-6 hidden rounded-xl border border-slate-200 bg-white p-6">
+      <h2 class="mb-4 flex items-center gap-2 text-lg font-semibold">
+        <i data-lucide="scan-eye" class="h-5 w-5 text-slate-500"></i> AI layer detection
+      </h2>
+      <div id="detVerdict" class="mb-5"></div>
+      <div class="grid gap-4 sm:grid-cols-2">
+        <div>
+          <div class="mb-2 flex items-center justify-between">
+            <span class="text-[13px] font-medium text-slate-500">Before</span>
+            <span id="detBeforeLayer" class="rounded border border-slate-200 bg-slate-50 px-2 py-0.5 text-xs font-semibold text-slate-600"></span>
+          </div>
+          <img id="detBeforeImg" alt="Before — annotated" class="w-full rounded-lg border border-slate-200">
+        </div>
+        <div>
+          <div class="mb-2 flex items-center justify-between">
+            <span class="text-[13px] font-medium text-slate-500">After</span>
+            <span id="detAfterLayer" class="rounded border border-slate-200 bg-slate-50 px-2 py-0.5 text-xs font-semibold text-slate-600"></span>
+          </div>
+          <img id="detAfterImg" alt="After — annotated" class="w-full rounded-lg border border-slate-200">
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ RESULTS LOADING SKELETON (read-only fetch) ============ -->
+    <section id="resultsLoading" class="hidden">
+      <div class="mb-4 flex items-center gap-3 text-sm text-slate-500">
+        <span class="spin inline-block h-4 w-4 rounded-full border-2 border-slate-300 border-t-brand"></span>
+        Loading analysis…
+      </div>
+      <div class="mb-4 grid gap-4 lg:grid-cols-[1.5fr_1fr_1fr]">
+        <div class="skel h-36 rounded-xl"></div>
+        <div class="skel h-36 rounded-xl"></div>
+        <div class="skel h-36 rounded-xl"></div>
+      </div>
+      <div class="skel mb-4 h-24 rounded-xl"></div>
+      <div class="skel h-64 rounded-xl"></div>
+    </section>
+
+    <!-- ============ SECTION D — RESULTS ============ -->
+    <section id="results" class="hidden">
+
+      <!-- meta row -->
+      <div class="mb-4 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-slate-500">
+        <span id="resProject" class="font-semibold text-slate-800"></span>
+        <span id="resTime" class="mono"></span>
+        <span id="resTask" class="mono text-slate-400"></span>
+      </div>
+
+      <!-- hero metrics -->
+      <div class="mb-4 grid gap-4 lg:grid-cols-[1.5fr_1fr_1fr]">
+        <div class="relative overflow-hidden rounded-xl bg-slate-900 p-7 text-white">
+          <div class="text-xs font-semibold uppercase tracking-wider text-blue-300">Volume Change</div>
+          <div class="tnum mt-3 flex items-baseline gap-2">
+            <span id="heroM3" class="mono text-[52px] font-bold leading-none tracking-tight">—</span>
+            <span class="text-xl font-semibold text-slate-300">m³</span>
+          </div>
+          <div id="heroYd3" class="mono mt-2 text-sm text-slate-400">— yd³</div>
+        </div>
+        <div class="rounded-xl border border-slate-200 bg-white p-6">
+          <div class="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+            <i data-lucide="arrow-up" class="h-3.5 w-3.5 text-green-600"></i> Material Added
+          </div>
+          <div id="fillVal" class="mono tnum mt-3 text-3xl font-semibold tracking-tight">—</div>
+          <div class="mt-0.5 text-[13px] text-slate-400">m³ fill</div>
+        </div>
+        <div class="rounded-xl border border-slate-200 bg-white p-6">
+          <div class="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+            <i data-lucide="arrow-down" class="h-3.5 w-3.5 text-slate-400"></i> Material Removed
+          </div>
+          <div id="cutVal" class="mono tnum mt-3 text-3xl font-semibold tracking-tight text-slate-400">—</div>
+          <div class="mt-0.5 text-[13px] text-slate-400">m³ cut</div>
+        </div>
+      </div>
+
+      <!-- interpretation -->
+      <div id="interpretation" class="mb-4 flex items-start gap-3 rounded-lg border border-slate-200 bg-white p-5 text-sm text-slate-600"></div>
+
+      <!-- Orthomosaic (hidden unless the run produced orthophoto previews) -->
+      <div id="orthoCard" class="mb-4 hidden overflow-hidden rounded-xl border border-slate-200 bg-white">
+        <div class="border-b border-slate-200 px-6 py-4">
+          <h2 class="flex items-center gap-2 text-lg font-semibold">
+            <i data-lucide="map" class="h-5 w-5 text-slate-500"></i> Orthomosaic
+          </h2>
+        </div>
+        <div class="grid gap-4 p-6 sm:grid-cols-2">
+          <div id="orthoBeforeWrap">
+            <div class="mb-2 text-[13px] font-medium text-slate-500">Before</div>
+            <img id="orthoBeforeImg" alt="Before orthomosaic" class="w-full rounded-lg border border-slate-200">
+          </div>
+          <div id="orthoAfterWrap">
+            <div class="mb-2 text-[13px] font-medium text-slate-500">After</div>
+            <img id="orthoAfterImg" alt="After orthomosaic" class="w-full rounded-lg border border-slate-200">
+          </div>
+        </div>
+      </div>
+
+      <!-- BOQ -->
+      <div class="mb-4 overflow-hidden rounded-xl border border-slate-200 bg-white">
+        <div class="border-b border-slate-200 px-6 py-4">
+          <h2 class="text-lg font-semibold">Bill of Quantities</h2>
+        </div>
+        <table class="w-full text-sm">
+          <thead>
+            <tr class="border-b border-slate-200 bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-500">
+              <th class="px-6 py-3 text-left">Road layer</th>
+              <th class="px-6 py-3 text-right">Quantity</th>
+              <th class="px-6 py-3 text-left">Unit</th>
+              <th class="px-6 py-3 text-right">Rate (<span class="curLbl">PKR</span>)</th>
+              <th class="px-6 py-3 text-right">Amount (<span class="curLbl">PKR</span>)</th>
+            </tr>
+          </thead>
+          <tbody id="boqBody" class="tnum"></tbody>
+          <tfoot>
+            <tr class="border-t border-slate-200 bg-slate-50">
+              <td colspan="4" class="px-6 py-4 font-semibold">Total</td>
+              <td id="boqTotal" class="mono px-6 py-4 text-right text-base font-bold text-brand">—</td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+
+      <!-- S-curve -->
+      <div id="scurveCard" class="mb-4 overflow-hidden rounded-xl border border-slate-200 bg-white">
+        <div class="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-6 py-4">
+          <h2 class="text-lg font-semibold">Progress S-curve</h2>
+          <div id="scurveStatus" class="flex items-center gap-3 text-sm"></div>
+        </div>
+        <div class="p-6">
+          <img id="scurveImg" alt="Planned vs actual S-curve" class="w-full rounded-lg border border-slate-200">
+        </div>
+      </div>
+
+      <!-- actions -->
+      <div class="flex flex-wrap items-center gap-3">
+        <button id="excelBtn" class="inline-flex items-center gap-2 rounded bg-green-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-green-700">
+          <i data-lucide="file-spreadsheet" class="h-4 w-4"></i> Excel Report
+        </button>
+        <button id="jsonBtn" class="inline-flex items-center gap-2 rounded border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50">
+          <i data-lucide="download" class="h-4 w-4"></i> Download Report
+        </button>
+        <div class="relative">
+          <button id="assetsBtn" class="inline-flex items-center gap-2 rounded border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50">
+            <i data-lucide="folder-open" class="h-4 w-4"></i> View Assets
+            <i data-lucide="chevron-down" class="h-4 w-4 text-slate-400"></i>
+          </button>
+          <div id="assetsMenu" class="absolute left-0 top-full z-20 mt-1 hidden w-56 overflow-hidden rounded-lg border border-slate-200 bg-white py-1 shadow-lg"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ ERROR BANNER ============ -->
+    <div id="errorBanner" class="mt-6 hidden items-start gap-3 rounded-lg border border-red-200 bg-red-50 p-4">
+      <i data-lucide="x-circle" class="mt-0.5 h-4.5 w-4.5 shrink-0 text-red-600"></i>
+      <div class="text-sm text-red-800"><span class="font-semibold">Analysis failed.</span> <span id="errorMsg"></span></div>
+    </div>
+
+  </main>
+
+  <!-- ================================================================= -->
+  <!-- APPLICATION SCRIPT                                                -->
+  <!-- ================================================================= -->
+  <script>
+  (function () {
+    "use strict";
+
+    // ---------- tiny DOM helpers ----------
+    const $ = (s, r = document) => r.querySelector(s);
+    const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
+    const icons = () => { try { lucide.createIcons(); } catch (e) {} };
+
+    const nf = (n, d = 2) => (n == null || isNaN(n)) ? "—" : Number(n).toLocaleString("en-US", { minimumFractionDigits: d, maximumFractionDigits: d });
+    const nInt = (n) => (n == null || isNaN(n)) ? "—" : Math.round(Number(n)).toLocaleString("en-US");
+
+    // ---------- app state ----------
+    const state = {
+      mode: "fresh",
+      files: { before_images: [], after_images: [], gcp_file: [], before_dsm: [], after_dsm: [] },
+      currency: "PKR",
+      rates: [],
+      taskId: null,
+      poll: null,
+      readonly: false,
+    };
+
+    const OPT_KEY = "cva_options";
+    const STEPS = ["Upload", "Photogrammetry", "Volume", "Detection", "Cost"];
+
+    // ================= API layer (real fetch; demo mock auto-fallback) =================
+    async function api(path, opts) {
+      const res = await fetch(path, opts);
+      const ct = res.headers.get("content-type") || "";
+      const body = ct.includes("application/json") ? await res.json() : await res.text();
+      if (!res.ok) throw new Error((body && body.error) || ("HTTP " + res.status));
+      return body;
+    }
+
+    // ============================ HEALTH ============================
+    async function loadHealth() {
+      try {
+        const h = await api("/health");
+        const ok = h.services && h.services.webodm && h.services.cloudcompare;
+        $("#healthLed").className = "h-1.5 w-1.5 rounded-full " + (ok ? "bg-green-500 ring-2 ring-green-500/20" : "bg-amber-500 ring-2 ring-amber-500/20");
+        $("#healthText").textContent = ok ? "services ok" : "degraded";
+        const banners = $("#healthBanners");
+        banners.innerHTML = "";
+        const warn = (label) => {
+          const el = document.createElement("div");
+          el.className = "flex items-center justify-between gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3";
+          el.innerHTML = '<div class="flex items-center gap-3"><i data-lucide="alert-triangle" class="h-4.5 w-4.5 text-amber-600"></i>' +
+            '<span class="text-sm text-amber-800">' + label + '</span></div>' +
+            '<button class="text-lg leading-none text-amber-700 hover:text-amber-900">&times;</button>';
+          el.querySelector("button").onclick = () => el.remove();
+          banners.appendChild(el);
+        };
+        if (h.services && !h.services.webodm) warn("WebODM service not available — Start Fresh mode may not work.");
+        if (h.services && !h.services.cloudcompare) warn("CloudCompare service not available — volume computation may be limited.");
+        icons();
+      } catch (e) {
+        $("#healthLed").className = "h-1.5 w-1.5 rounded-full bg-slate-300";
+        $("#healthText").textContent = "offline";
+      }
+    }
+
+    // ============================ PLAN ============================
+    async function loadPlan() {
+      try {
+        const p = await api("/api/plan");
+        $("#planName").value = p.project_name || "";
+        $("#planCurrency").value = p.currency || "PKR";
+        $("#planBudget").value = p.total_budget != null ? p.total_budget : "";
+        $("#planPeriods").value = Array.isArray(p.period_labels) ? p.period_labels.join(", ") : "";
+        state.currency = p.currency || "PKR";
+        applyCurrency();
+      } catch (e) { /* leave blank */ }
+    }
+    async function savePlan() {
+      const btn = $("#savePlan"), st = $("#planStatus");
+      st.innerHTML = feedback("saving");
+      try {
+        const payload = {
+          project_name: $("#planName").value.trim(),
+          currency: $("#planCurrency").value.trim() || "PKR",
+          total_budget: Number($("#planBudget").value) || 0,
+          period_labels: $("#planPeriods").value.split(",").map(s => s.trim()).filter(Boolean),
+          planned_cumulative: [],
+        };
+        const r = await api("/api/plan", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+        if (r.error) throw new Error(r.error);
+        state.currency = payload.currency; applyCurrency();
+        st.innerHTML = feedback("saved");
+      } catch (e) { st.innerHTML = feedback("error", e.message); }
+      setTimeout(() => { st.innerHTML = ""; }, 3000);
+    }
+
+    // ============================ RATES ============================
+    async function loadRates() {
+      try {
+        const r = await api("/api/rates");
+        state.rates = r.rates || [];
+        state.currency = r.currency || state.currency;
+        renderRates();
+        applyCurrency();
+      } catch (e) { $("#ratesBody").innerHTML = '<tr><td colspan="4" class="px-4 py-4 text-sm text-slate-400">Could not load rates.</td></tr>'; }
+    }
+    function renderRates() {
+      const body = $("#ratesBody");
+      body.innerHTML = "";
+      state.rates.forEach((row, i) => {
+        const tr = document.createElement("tr");
+        tr.innerHTML =
+          '<td class="mono px-4 py-2.5 text-slate-400">' + (i + 1) + '</td>' +
+          '<td class="px-4 py-2.5 font-medium">' + esc(row.name) + '</td>' +
+          '<td class="mono px-4 py-2.5 text-slate-500">' + esc(row.unit) + '</td>' +
+          '<td class="px-4 py-2.5 text-right"><input type="number" step="0.01" data-cid="' + row.class_id + '" ' +
+          'class="rateInput field mono w-28 rounded border border-slate-300 px-2 py-1.5 text-right text-sm" value="' + (row.rate != null ? row.rate : 0) + '"></td>';
+        body.appendChild(tr);
+      });
+    }
+    async function saveRates() {
+      const st = $("#ratesStatus");
+      st.innerHTML = feedback("saving");
+      try {
+        const rates = $$(".rateInput").map(inp => ({ class_id: Number(inp.dataset.cid), rate: Number(inp.value) || 0 }));
+        const r = await api("/api/rates", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ rates }) });
+        if (r.error) throw new Error(r.error);
+        if (r.rates) { state.rates = r.rates; renderRates(); }
+        st.innerHTML = feedback("saved");
+      } catch (e) { st.innerHTML = feedback("error", e.message); }
+      setTimeout(() => { st.innerHTML = ""; }, 3000);
+    }
+
+    function feedback(kind, msg) {
+      if (kind === "saving") return '<span class="inline-flex items-center gap-2 text-slate-500"><span class="spin inline-block h-3.5 w-3.5 rounded-full border-2 border-slate-300 border-t-slate-600"></span>Saving…</span>';
+      if (kind === "saved") return '<span class="inline-flex items-center gap-1.5 font-medium text-green-600"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Saved</span>';
+      return '<span class="font-medium text-red-600">' + esc(msg || "Failed to save") + '</span>';
+    }
+
+    // ============================ MODE ============================
+    function setMode(m) {
+      state.mode = m;
+      $$(".modeCard").forEach(c => {
+        const active = c.dataset.mode === m;
+        c.className = "modeCard rounded-lg border p-4 text-left transition " +
+          (active ? "border-brand bg-brand-light ring-1 ring-brand" : "border-slate-200 hover:border-slate-300");
+      });
+      $("#freshInputs").classList.toggle("hidden", m !== "fresh");
+      $("#existingInputs").classList.toggle("hidden", m !== "existing");
+      updateStartState();
+    }
+
+    // ============================ DROPZONES ============================
+    const DZ_META = {
+      before_images: { label: "Before Images", hint: "JPG, PNG · multiple", icon: "images" },
+      after_images: { label: "After Images", hint: "JPG, PNG · multiple", icon: "images" },
+      gcp_file: { label: "Ground Control Points (optional)", hint: "TXT or CSV · one file", icon: "map-pin" },
+      before_dsm: { label: "Before DSM", hint: ".tif / .tiff · one file", icon: "layers" },
+      after_dsm: { label: "After DSM", hint: ".tif / .tiff · one file", icon: "layers" },
+    };
+    function buildDropzones() {
+      $$("[data-dz]").forEach(host => {
+        const key = host.dataset.dz;
+        const meta = DZ_META[key];
+        host.innerHTML =
+          '<div class="mb-2 text-[13px] font-medium text-slate-700">' + meta.label + '</div>' +
+          '<div class="dzArea cursor-pointer rounded-lg border-[1.5px] border-dashed border-slate-300 bg-white p-6 text-center transition hover:border-slate-400">' +
+            '<i data-lucide="' + meta.icon + '" class="mx-auto mb-2.5 h-6 w-6 text-slate-400"></i>' +
+            '<div class="text-sm font-medium text-slate-700">Drop files or <span class="text-brand">browse</span></div>' +
+            '<div class="mt-0.5 text-xs text-slate-400">' + meta.hint + '</div>' +
+          '</div>' +
+          '<input type="file" class="hidden dzInput" ' + (host.dataset.multi === "1" ? "multiple" : "") + ' accept="' + host.dataset.accept + '">' +
+          '<div class="dzList mt-2"></div>';
+        const area = $(".dzArea", host), input = $(".dzInput", host);
+        area.onclick = () => input.click();
+        input.onchange = () => addFiles(key, Array.from(input.files), host);
+        area.addEventListener("dragover", e => { e.preventDefault(); area.classList.add("border-brand", "bg-brand-light"); });
+        area.addEventListener("dragleave", () => area.classList.remove("border-brand", "bg-brand-light"));
+        area.addEventListener("drop", e => {
+          e.preventDefault();
+          area.classList.remove("border-brand", "bg-brand-light");
+          addFiles(key, Array.from(e.dataTransfer.files), host);
         });
+      });
+      icons();
+    }
+    function addFiles(key, files, host) {
+      if (!files.length) return;
+      if (host.dataset.multi === "1") state.files[key] = state.files[key].concat(files);
+      else state.files[key] = files.slice(0, 1);
+      renderFileList(key, host);
+      updateStartState();
+    }
+    function renderFileList(key, host) {
+      const list = $(".dzList", host), files = state.files[key];
+      const area = $(".dzArea", host);
+      if (!files.length) { list.innerHTML = ""; area.classList.remove("border-green-500", "bg-green-50"); return; }
+      area.classList.add("border-green-500", "bg-green-50");
+      area.classList.remove("border-slate-300");
+      let items = files.map((f, i) =>
+        '<div class="flex items-center justify-between gap-2 px-3 py-1.5 text-xs"><span class="mono truncate text-slate-600">' + esc(f.name) + '</span>' +
+        '<button data-rm="' + i + '" class="shrink-0 text-slate-400 hover:text-red-600">&times;</button></div>').join("");
+      list.innerHTML =
+        '<div class="overflow-hidden rounded-lg border border-green-200 bg-green-50">' +
+          '<div class="flex items-center justify-between border-b border-green-200 px-3 py-2 text-[13px] font-semibold text-green-700">' +
+            '<span class="flex items-center gap-1.5"><i data-lucide="check-circle-2" class="h-4 w-4"></i>' + files.length + (files.length === 1 ? " file ready" : " files ready") + '</span>' +
+            '<button data-clear="1" class="text-xs font-medium text-green-700 hover:text-green-900">Clear</button>' +
+          '</div>' +
+          '<div class="filelist max-h-24 overflow-auto">' + items + '</div>' +
+        '</div>';
+      $("[data-clear]", list).onclick = () => { state.files[key] = []; renderFileList(key, host); resetDzArea(host); updateStartState(); };
+      $$("[data-rm]", list).forEach(b => b.onclick = () => { state.files[key].splice(Number(b.dataset.rm), 1); renderFileList(key, host); if (!state.files[key].length) resetDzArea(host); updateStartState(); });
+      icons();
+    }
+    function resetDzArea(host) {
+      const area = $(".dzArea", host);
+      area.classList.remove("border-green-500", "bg-green-50");
+      area.classList.add("border-slate-300");
+    }
 
-        // Prevent form submission on Enter key in number inputs
-        document.addEventListener('keydown', function(e) {
-            if (e.key === 'Enter' && e.target.type === 'number') {
-                e.preventDefault();
-            }
-        });
+    // ============================ VALIDATION / START ============================
+    function requiredReady() {
+      if (state.mode === "fresh") return state.files.before_images.length && state.files.after_images.length;
+      return state.files.before_dsm.length && state.files.after_dsm.length;
+    }
+    function updateStartState() {
+      $("#startBtn").disabled = !requiredReady();
+      $("#inputError").textContent = "";
+    }
 
-        // Auto-save form data to localStorage
-        const formInputs = ['demResolution', 'meshResolution', 'volumeMethod', 'enableDetection'];
-        
-        formInputs.forEach(inputId => {
-            const element = document.getElementById(inputId);
-            
-            // Load saved value
-            const savedValue = localStorage.getItem(`constructionAnalysis_${inputId}`);
-            if (savedValue !== null) {
-                if (element.type === 'checkbox') {
-                    element.checked = savedValue === 'true';
-                } else {
-                    element.value = savedValue;
-                }
-            }
-            
-            // Save on change
-            element.addEventListener('change', function() {
-                const value = element.type === 'checkbox' ? element.checked : element.value;
-                localStorage.setItem(`constructionAnalysis_${inputId}`, value);
-            });
-        });
+    async function startAnalysis() {
+      if (!requiredReady()) {
+        $("#inputError").textContent = state.mode === "fresh"
+          ? "Add both Before and After images to continue."
+          : "Add both Before and After DSM files to continue.";
+        return;
+      }
+      persistOptions();
+      $("#startBtn").disabled = true;
+      $("#errorBanner").classList.add("hidden");
+      $("#detection").classList.add("hidden");
+      $("#results").classList.add("hidden");
+      showProcessing(0, "Uploading…");
 
-        // Drag and drop functionality
-        function setupDragDrop() {
-            const dropZones = document.querySelectorAll('.file-upload');
-            
-            dropZones.forEach(zone => {
-                zone.addEventListener('dragover', function(e) {
-                    e.preventDefault();
-                    zone.style.borderColor = '#27ae60';
-                    zone.style.backgroundColor = '#d5edda';
-                });
-                
-                zone.addEventListener('dragleave', function(e) {
-                    e.preventDefault();
-                    zone.style.borderColor = '#3498db';
-                    zone.style.backgroundColor = '';
-                });
-                
-                zone.addEventListener('drop', function(e) {
-                    e.preventDefault();
-                    zone.style.borderColor = '#3498db';
-                    zone.style.backgroundColor = '';
-                    
-                    const files = e.dataTransfer.files;
-                    const input = zone.querySelector('input[type="file"]');
-                    
-                    if (files.length > 0) {
-                        input.files = files;
-                        const event = new Event('change', { bubbles: true });
-                        input.dispatchEvent(event);
-                    }
-                });
-            });
+      try {
+        const fd = new FormData();
+        let resp;
+        if (state.mode === "fresh") {
+          state.files.before_images.forEach(f => fd.append("before_images", f));
+          state.files.after_images.forEach(f => fd.append("after_images", f));
+          if (state.files.gcp_file[0]) fd.append("gcp_file", state.files.gcp_file[0]);
+          fd.append("dem_resolution", $("#demResolution").value || "0.1");
+          fd.append("mesh_resolution", $("#meshResolution").value);
+          fd.append("volume_method", $("#volumeMethod").value);
+          fd.append("enable_detection", $("#enableDetection").checked ? "true" : "false");
+          resp = await api("/upload", { method: "POST", body: fd });
+        } else {
+          fd.append("before_dsm", state.files.before_dsm[0]);
+          fd.append("after_dsm", state.files.after_dsm[0]);
+          resp = await api("/upload-existing", { method: "POST", body: fd });
         }
-
-        // Initialize drag and drop
-        setupDragDrop();
-        
-        // Add some nice animations
-        function addAnimations() {
-            const cards = document.querySelectorAll('.file-upload, .result-card');
-            
-            const observer = new IntersectionObserver((entries) => {
-                entries.forEach((entry) => {
-                    if (entry.isIntersecting) {
-                        entry.target.style.opacity = '1';
-                        entry.target.style.transform = 'translateY(0)';
-                    }
-                });
-            });
-            
-            cards.forEach((card, index) => {
-                card.style.opacity = '0';
-                card.style.transform = 'translateY(20px)';
-                card.style.transition = `opacity 0.6s ease ${index * 0.1}s, transform 0.6s ease ${index * 0.1}s`;
-                observer.observe(card);
-            });
+        if (resp.error) throw new Error(resp.error);
+        state.taskId = resp.task_id;
+        if (resp.detection_results || resp.detection_summary) {
+          renderDetection(resp.detection_results, resp.detection_summary);
         }
+        beginPolling();
+      } catch (e) {
+        failRun(e.message);
+      }
+    }
 
-        // Initialize animations when DOM is ready
-        document.addEventListener('DOMContentLoaded', addAnimations);
+    // ============================ PROCESSING / POLLING ============================
+    function showProcessing(pct, msg) {
+      $("#processing").classList.remove("hidden");
+      renderStepper(pct);
+      $("#procBar").style.width = Math.max(2, pct) + "%";
+      $("#procPct").textContent = Math.round(pct) + "%";
+      $("#procMsg").textContent = msg || "";
+    }
+    function renderStepper(pct) {
+      const active = pct >= 100 ? STEPS.length : pct >= 90 ? 4 : pct >= 80 ? 3 : pct >= 50 ? 2 : pct > 0 ? 1 : 0;
+      const wrap = $("#stepper");
+      wrap.innerHTML = STEPS.map((label, i) => {
+        const done = i < active, cur = i === active;
+        const dot = done
+          ? '<span class="flex h-[22px] w-[22px] items-center justify-center rounded-full bg-green-600"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>'
+          : cur
+          ? '<span class="flex h-[22px] w-[22px] items-center justify-center rounded-full bg-brand ring-4 ring-brand/15"><span class="h-1.5 w-1.5 rounded-full bg-white"></span></span>'
+          : '<span class="mono flex h-[22px] w-[22px] items-center justify-center rounded-full bg-slate-200 text-[11px] text-slate-400">' + (i + 1) + '</span>';
+        const txt = '<span class="text-[13px] font-medium ' + (done || cur ? "text-slate-900" : "text-slate-400") + '">' + label + '</span>';
+        const bar = i < STEPS.length - 1 ? '<div class="mx-3 h-0.5 flex-1 ' + (done ? "bg-green-600" : "bg-slate-200") + '"></div>' : '';
+        return '<div class="flex items-center gap-2">' + dot + txt + '</div>' + bar;
+      }).join("");
+    }
+    function beginPolling() {
+      clearInterval(state.poll);
+      const tick = async () => {
+        try {
+          const s = await api("/status/" + encodeURIComponent(state.taskId));
+          if (s.status === "processing") {
+            showProcessing(s.progress || 0, s.message || "Processing…");
+          } else if (s.status === "completed") {
+            clearInterval(state.poll);
+            showProcessing(100, "Complete");
+            await loadResults(state.taskId);
+            $("#processing").classList.add("hidden");
+            $("#startBtn").disabled = false;
+          } else if (s.status === "failed") {
+            clearInterval(state.poll);
+            failRun(s.message || "Processing failed.");
+          } else if (s.status === "not_found") {
+            clearInterval(state.poll);
+            failRun("Task not found.");
+          }
+        } catch (e) { /* transient — keep polling */ }
+      };
+      tick();
+      state.poll = setInterval(tick, 2000);
+    }
+    function failRun(msg) {
+      clearInterval(state.poll);
+      $("#processing").classList.add("hidden");
+      $("#resultsLoading").classList.add("hidden");
+      $("#errorMsg").textContent = msg || "";
+      $("#errorBanner").classList.remove("hidden");
+      $("#errorBanner").classList.add("flex");
+      $("#startBtn").disabled = false;
+    }
 
-        // ----- Settings panel (rate list + project plan) -----
+    // ============================ DETECTION ============================
+    function renderDetection(results, summary) {
+      $("#detection").classList.remove("hidden");
+      if (summary) {
+        const positive = !!summary.changed;
+        const v = $("#detVerdict");
+        v.className = "flex items-center gap-3 rounded-lg border px-4 py-3 " + (positive ? "border-green-200 bg-green-50" : "border-slate-200 bg-slate-50");
+        v.innerHTML = '<i data-lucide="' + (positive ? "check-circle-2" : "info") + '" class="h-4.5 w-4.5 ' + (positive ? "text-green-600" : "text-slate-500") + '"></i>' +
+          '<span class="text-sm ' + (positive ? "text-green-800" : "text-slate-600") + '">' + esc(summary.verdict || "") + '</span>';
+        $("#detBeforeLayer").textContent = summary.before_layer || "";
+        $("#detAfterLayer").textContent = summary.after_layer || "";
+      }
+      if (results) {
+        if (results.before) { $("#detBeforeImg").src = results.before.image; $("#detBeforeLayer").textContent = results.before.dominant || $("#detBeforeLayer").textContent; }
+        if (results.after) { $("#detAfterImg").src = results.after.image; $("#detAfterLayer").textContent = results.after.dominant || $("#detAfterLayer").textContent; }
+      }
+      icons();
+    }
 
-        function toggleSettings() {
-            const body = document.getElementById('settingsBody');
-            const label = document.getElementById('settingsToggleLabel');
-            const open = body.style.display !== 'none';
-            body.style.display = open ? 'none' : 'block';
-            label.textContent = (open ? '⚙️ Project Plan & Rate List ▸'
-                                      : '⚙️ Project Plan & Rate List ▾');
-        }
+    // ============================ RESULTS ============================
+    async function loadResults(taskId) {
+      try {
+        const r = await api("/results/" + encodeURIComponent(taskId));
+        renderResults(r);
+      } catch (e) { failRun("Could not load results: " + e.message); }
+    }
+    function renderResults(r) {
+      state.taskId = r.task_id || state.taskId;
+      const cur = (r.boq && r.boq.currency) || state.currency || "PKR";
+      state.currency = cur; applyCurrency();
 
-        async function loadSettings() {
-            try {
-                const [planRes, ratesRes] = await Promise.all([
-                    fetch('/api/plan').then(r => r.json()),
-                    fetch('/api/rates').then(r => r.json())
-                ]);
-                document.getElementById('planName').value = planRes.project_name || '';
-                document.getElementById('planCurrency').value = planRes.currency || 'PKR';
-                document.getElementById('planBudget').value = planRes.total_budget || 0;
-                document.getElementById('planPeriods').value =
-                    (planRes.period_labels || []).join(', ');
-                renderRatesTable(ratesRes.rates || []);
-            } catch (e) {
-                console.error('Failed to load settings:', e);
-            }
-        }
+      $("#resProject").textContent = r.project_name || "Untitled project";
+      $("#resTime").textContent = r.timestamp ? fmtDate(r.timestamp) : "";
+      $("#resTask").textContent = r.task_id ? ("#" + String(r.task_id).slice(0, 8)) : "";
 
-        function renderRatesTable(rates) {
-            const tbody = document.getElementById('ratesTableBody');
-            tbody.innerHTML = '';
-            rates.forEach(r => {
-                const tr = document.createElement('tr');
-                tr.innerHTML = `
-                    <td>${r.class_id}</td>
-                    <td>${r.name}</td>
-                    <td>${r.unit}</td>
-                    <td style="text-align:right;">
-                        <input type="number" min="0" step="0.01" class="rate-input"
-                               data-class-id="${r.class_id}" value="${r.rate}">
-                    </td>`;
-                tbody.appendChild(tr);
-            });
-        }
+      $("#heroM3").textContent = nf(r.volume_change_m3, 2);
+      $("#heroYd3").textContent = nf(r.volume_change_yd3, 2) + " yd³";
 
-        async function savePlan() {
-            const statusEl = document.getElementById('planStatus');
-            statusEl.textContent = 'Saving...';
-            statusEl.style.color = '#555';
-            const periods = document.getElementById('planPeriods').value
-                .split(',').map(s => s.trim()).filter(Boolean);
-            const payload = {
-                project_name: document.getElementById('planName').value,
-                currency: document.getElementById('planCurrency').value || 'PKR',
-                total_budget: parseFloat(document.getElementById('planBudget').value) || 0,
-                period_labels: periods,
-                planned_cumulative: []
-            };
-            try {
-                const res = await fetch('/api/plan', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify(payload)
-                });
-                const data = await res.json();
-                if (data.success) {
-                    statusEl.textContent = '✓ Saved';
-                    statusEl.style.color = '#27ae60';
-                } else {
-                    statusEl.textContent = '✗ ' + (data.error || 'Save failed');
-                    statusEl.style.color = '#c0392b';
-                }
-            } catch (e) {
-                statusEl.textContent = '✗ ' + e.message;
-                statusEl.style.color = '#c0392b';
-            }
-        }
+      const an = r.analysis || {};
+      $("#fillVal").textContent = nf(an.fill_volume, 2);
+      $("#cutVal").textContent = nf(an.cut_volume, 2);
+      $("#interpretation").innerHTML = '<i data-lucide="info" class="mt-0.5 h-4 w-4 shrink-0 text-slate-400"></i><span>' + esc(an.interpretation || "No interpretation available.") + '</span>';
 
-        async function saveRates() {
-            const statusEl = document.getElementById('ratesStatus');
-            statusEl.textContent = 'Saving...';
-            statusEl.style.color = '#555';
-            const inputs = document.querySelectorAll('#ratesTableBody .rate-input');
-            const rates = Array.from(inputs).map(i => ({
-                class_id: parseInt(i.dataset.classId, 10),
-                rate: parseFloat(i.value) || 0
-            }));
-            try {
-                const res = await fetch('/api/rates', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({rates: rates})
-                });
-                const data = await res.json();
-                if (data.success) {
-                    statusEl.textContent = '✓ Saved';
-                    statusEl.style.color = '#27ae60';
-                } else {
-                    statusEl.textContent = '✗ ' + (data.error || 'Save failed');
-                    statusEl.style.color = '#c0392b';
-                }
-            } catch (e) {
-                statusEl.textContent = '✗ ' + e.message;
-                statusEl.style.color = '#c0392b';
-            }
-        }
+      // BOQ
+      const boq = r.boq || {}, items = boq.items || [];
+      const body = $("#boqBody");
+      body.innerHTML = items.map(it =>
+        '<tr class="border-b border-slate-100">' +
+          '<td class="px-6 py-3.5 font-medium">' + esc(it.layer) + '</td>' +
+          '<td class="mono px-6 py-3.5 text-right text-slate-600">' + nf(it.quantity, 2) + '</td>' +
+          '<td class="mono px-6 py-3.5 text-[13px] text-slate-500">' + esc(it.unit) + '</td>' +
+          '<td class="mono px-6 py-3.5 text-right text-slate-600">' + nInt(it.rate) + '</td>' +
+          '<td class="mono px-6 py-3.5 text-right font-semibold">' + nInt(it.amount) + '</td>' +
+        '</tr>').join("") || '<tr><td colspan="5" class="px-6 py-5 text-sm text-slate-400">No line items.</td></tr>';
+      $("#boqTotal").textContent = nInt(boq.total_cost);
 
-        // Load settings on page load
-        loadSettings();
+      // S-curve
+      const sc = r.scurve || {};
+      const summ = sc.summary || {};
+      const statusEl = $("#scurveStatus");
+      const ahead = (summ.status || "").toLowerCase().includes("ahead");
+      statusEl.innerHTML = (summ.status
+        ? '<span class="rounded border px-2.5 py-1 text-xs font-semibold ' + (ahead ? "border-green-200 bg-green-50 text-green-700" : "border-slate-200 bg-slate-50 text-slate-600") + '">' + esc(summ.status) + '</span>'
+        : "") +
+        (summ.performance_index != null ? '<span class="mono text-slate-500">PI ' + nf(summ.performance_index, 3) + '</span>' : "");
+      if (r.scurve_image) { $("#scurveImg").src = r.scurve_image; $("#scurveCard").classList.remove("hidden"); }
+      else { $("#scurveCard").classList.add("hidden"); }
 
-        // If URL has ?task=<id>, auto-load that past result
-        const _urlParams = new URLSearchParams(window.location.search);
-        const _taskFromUrl = _urlParams.get('task');
-        if (_taskFromUrl) {
-            currentTaskId = _taskFromUrl;
-            document.getElementById('resultsContainer').style.display = 'block';
-            loadResults();
-        }
-    </script>
+      // Orthomosaic (present only when the run produced orthophoto previews)
+      const orthoB = r.orthophoto_before, orthoA = r.orthophoto_after;
+      if (orthoB || orthoA) {
+        if (orthoB) $("#orthoBeforeImg").src = orthoB;
+        if (orthoA) $("#orthoAfterImg").src = orthoA;
+        $("#orthoBeforeWrap").classList.toggle("hidden", !orthoB);
+        $("#orthoAfterWrap").classList.toggle("hidden", !orthoA);
+        $("#orthoCard").classList.remove("hidden");
+      } else {
+        $("#orthoCard").classList.add("hidden");
+      }
+
+      // Detection (if included in a results payload)
+      if (r.detection_results || r.detection_summary) renderDetection(r.detection_results, r.detection_summary);
+
+      // Asset menu
+      buildAssetsMenu(state.taskId);
+
+      $("#resultsLoading").classList.add("hidden");
+      $("#results").classList.remove("hidden");
+      icons();
+    }
+
+    function buildAssetsMenu(taskId) {
+      const menu = $("#assetsMenu");
+      const assets = [
+        ["report", "JSON report"],
+        ["before_dem", "Before DEM"],
+        ["after_dem", "After DEM"],
+        ["before_mesh", "Before mesh"],
+        ["after_mesh", "After mesh"],
+      ];
+      menu.innerHTML = assets.map(([type, label]) =>
+        '<a href="/download/' + encodeURIComponent(taskId) + '/' + type + '" class="flex items-center gap-2.5 px-3.5 py-2 text-sm text-slate-700 hover:bg-slate-50">' +
+        '<i data-lucide="file" class="h-4 w-4 text-slate-400"></i>' + label + '</a>').join("");
+      icons();
+    }
+
+    // ============================ DOWNLOADS ============================
+    function downloadExcel() { if (state.taskId) window.location = "/report-excel/" + encodeURIComponent(state.taskId); }
+    function downloadJson() { if (state.taskId) window.location = "/download/" + encodeURIComponent(state.taskId) + "/report"; }
+
+    // ============================ OPTIONS PERSISTENCE ============================
+    function persistOptions() {
+      try {
+        localStorage.setItem(OPT_KEY, JSON.stringify({
+          dem_resolution: $("#demResolution").value,
+          mesh_resolution: $("#meshResolution").value,
+          volume_method: $("#volumeMethod").value,
+          enable_detection: $("#enableDetection").checked,
+        }));
+      } catch (e) {}
+    }
+    function restoreOptions() {
+      try {
+        const o = JSON.parse(localStorage.getItem(OPT_KEY) || "{}");
+        if (o.dem_resolution != null) $("#demResolution").value = o.dem_resolution;
+        if (o.mesh_resolution) $("#meshResolution").value = o.mesh_resolution;
+        if (o.volume_method) $("#volumeMethod").value = o.volume_method;
+        if (o.enable_detection != null) $("#enableDetection").checked = !!o.enable_detection;
+      } catch (e) {}
+    }
+
+    // ============================ RESET ============================
+    function resetAll() {
+      clearInterval(state.poll);
+      Object.keys(state.files).forEach(k => state.files[k] = []);
+      buildDropzones();
+      $("#processing").classList.add("hidden");
+      $("#detection").classList.add("hidden");
+      $("#results").classList.add("hidden");
+      $("#errorBanner").classList.add("hidden");
+      state.taskId = null;
+      updateStartState();
+    }
+
+    // ============================ READ-ONLY MODE ============================
+    function enterReadonly() {
+      state.readonly = true;
+      $("#workspace").classList.add("hidden");
+      $("#pageHeader").classList.add("hidden");
+      $("#readonlyNotice").classList.remove("hidden");
+      $("#readonlyNotice").classList.add("flex");
+      $("#resultsLoading").classList.remove("hidden");
+    }
+
+    // ---------- misc helpers ----------
+    function esc(s) { return String(s == null ? "" : s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])); }
+    function fmtDate(iso) { const d = new Date(iso); return isNaN(d) ? iso : d.toLocaleString("en-US", { year: "numeric", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }); }
+    function applyCurrency() { $$(".curLbl").forEach(e => e.textContent = state.currency || "PKR"); }
+
+    // ============================ WIRING ============================
+    function wire() {
+      $("#cfgToggle").onclick = () => {
+        const body = $("#cfgBody"), open = body.classList.toggle("hidden") === false;
+        $("#cfgChevron").style.transform = open ? "rotate(180deg)" : "";
+      };
+      $$(".modeCard").forEach(c => c.onclick = () => setMode(c.dataset.mode));
+      $("#savePlan").onclick = savePlan;
+      $("#saveRates").onclick = saveRates;
+      $("#startBtn").onclick = startAnalysis;
+      $("#resetBtn").onclick = resetAll;
+      $("#excelBtn").onclick = downloadExcel;
+      $("#jsonBtn").onclick = downloadJson;
+      $("#assetsBtn").onclick = (e) => { e.stopPropagation(); $("#assetsMenu").classList.toggle("hidden"); };
+      document.addEventListener("click", () => $("#assetsMenu").classList.add("hidden"));
+      $("#assetsMenu").onclick = (e) => e.stopPropagation();
+      setupNavLoader();
+    }
+
+    // Thin top progress bar shown while navigating between pages.
+    function setupNavLoader() {
+      const nav = $("#navLoader");
+      if (!nav) return;
+      document.addEventListener("click", (e) => {
+        const a = e.target.closest("a[href]");
+        if (!a) return;
+        const href = a.getAttribute("href");
+        if (a.target || a.hasAttribute("download") || !href || href.charAt(0) === "#") return;
+        if (a.origin !== location.origin) return;
+        nav.style.opacity = "1";
+      });
+      window.addEventListener("pageshow", () => { nav.style.opacity = "0"; });
+    }
+
+    // ============================ INIT ============================
+    async function init() {
+      icons();
+      wire();
+      buildDropzones();
+      restoreOptions();
+      setMode("fresh");
+      await Promise.all([loadHealth(), loadPlan(), loadRates()]);
+
+      const task = new URLSearchParams(location.search).get("task");
+      if (task) { enterReadonly(); state.taskId = task; await loadResults(task); }
+      icons();
+    }
+
+    // Initialize once the DOM is parsed.
+    document.addEventListener("DOMContentLoaded", init);
+    if (document.readyState !== "loading") init();
+  })();
+  </script>
+
+
 </body>
 </html>

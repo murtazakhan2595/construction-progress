@@ -120,6 +120,111 @@ GSD; valid GeoTIFFs). The 3 pairs for the volume step:
 
 ---
 
+## 0.2 LATEST UPDATE — 2026-06-28 (app integrated end-to-end + live-demo wiring)
+
+The full pipeline now runs on the **operator's machine** (`d:\temp\zapru\...\construction_progress`)
+end-to-end: YOLO detection + volume + BOQ + S-curve. Summary of everything done.
+
+### Files now on the operator's machine
+- `models\best.pt` — the trained YOLO26s-seg model (auto-loaded; 23 MB).
+- `d:\temp\zapru\dsm_outputs\` — the 6 DSMs (3 before/after pairs) from WebODM.
+- `d:\temp\zapru\yolo Check\` — detection sanity images (flat folder).
+- `d:\temp\zapru\demo_images\{SubBase,ABC,PrimeCoat}\` — representative images per layer for detection.
+- `d:\temp\zapru\detection_results\` — annotated detection outputs + before/after comparison images.
+
+### Volume accuracy — Z-offset correction (IMPORTANT)
+Raw volumes were ~100× too high (e.g. ABC 2036 m³ vs actual ~20). Root cause:
+no GCPs → each before/after DSM is an independent reconstruction with an
+arbitrary **vertical datum offset** (measured ~3.6 m on the ABC pair), summed
+over the whole area. **Fix implemented** in `calculate_volume_from_dems`
+(rasterio path): subtract the **median over-overlap elevation difference**
+before integrating. Toggle via processing option `z_offset_correction`
+(default True). Validated:
+| Layer | Raw | Corrected | Actual |
+|-------|-----|-----------|--------|
+| ABC | 2036 m³ | 25.0 m³ | ~20 m³ ✓ |
+| PrimeCoat | −3379 m³ | −0.6 m³ | ~0 (thin spray) ✓ |
+| SubBase | 463 m³ | 6.5 m³ | (plausible, maybe low) |
+Caveat: median-correction assumes some unchanged background; it can under-count
+a uniform full-area lift. **Survey-grade volumes still need GCPs** (Min. 5 per
+the methodology) — state this as a known limitation / future work.
+
+### YOLO detection findings
+- `detect_objects()` runs at the default **imgsz 640** — this is the right
+  resolution (model trained on ~432 px Roboflow images). Higher imgsz hurt
+  (0.98 conf at 640 → 0.29 at 1280).
+- Strong on **training-style frames** (oblique road views, video frames):
+  Asphalt 0.97–0.98, ABC 0.80–0.96, Sub Base 0.35–0.86.
+- **Weak on raw 84 MP nadir frames** (the thesis _D.JPG sets) — a train/inference
+  **domain gap**. To detect reliably on those, retrain with full-res frames added.
+- First dataset Zafar sent had mislabeled folders; he sent a corrected set that
+  detects cleanly. Detection ground-truth confirmed via `run_detection_check.py`.
+
+### App code changes made
+- `road_layers.py` — 3 classes (0=Aggregate Base Course, 1=Asphalt, 2=Sub Base).
+- `finalV2.py`:
+  - `YOLO_MODEL_PATH` auto-loads `models\best.pt`.
+  - `calculate_volume_from_dems` — Z-offset (median) correction.
+  - `submit_webodm_task` — now uses **memory-safe options** (feature-quality
+    medium, pc-quality medium, resize-to 2048, max-concurrency 4, dsm/dtm,
+    dem/ortho-resolution 5 cm) and **pins to a processing node** when
+    `WEBODM_NODE_ID` is set (else auto). The old high-quality opts OOM'd on 84 MP.
+  - New `WEBODM_NODE_ID` env var.
+  - New helper `detect_layer_summary(image_paths, prefix, k=5)` — runs detection
+    over k samples, returns the **dominant layer** (highest summed confidence).
+  - `/upload` now runs `detect_layer_summary` on before & after sets, computes a
+    **before→after change verdict** ("Sub Base → ABC: new layer detected —
+    progress"), returns `detection_summary`, and attaches AFTER detections to the BOQ.
+- `templates/construction_volume.html` — detection preview now shows the
+  **dominant stage per phase + a change-verdict banner**.
+
+### Helper / driver scripts (operator machine)
+- `run_demo.py` — processes the 3 DSM pairs (detection + volume) → 3 reports in `/runs`.
+- `before_after_detection.py` — generates side-by-side before/after detection
+  comparison images (Methodology "AI Detection" demo).
+- `run_detection_check.py` — runs detection on a folder, saves annotated images + summary.
+
+### On Zafar's machine (WebODM host) — bring-up recap
+- WebODM 3.2.6 at `...\Data Simulation\WebODM`; start: `& "C:\Program Files\Git\bin\bash.exe" webodm.sh start`.
+- GPU NodeODM (Windows workaround — `webodm.sh --gpu` is NOT supported on Windows):
+  `docker run -d --gpus all --name nodeodm-gpu -p 40001:3000 opendronemap/nodeodm:gpu`
+  → registered as **processing node id 2** (`host.docker.internal:40001`).
+  Restart later with `docker start nodeodm-gpu` (no re-pull).
+- WebODM project **"construction progress" = id 2**; admin/admin.
+- Submit scripts on that machine: `submit_webodm.py`, `webodm_status.py`, `status_all.py`, `download_dsm.py`.
+
+### Live-demo architecture (target)
+Choreography chosen: **A (pre-staged) + live-capable** — same code path.
+- Upload before/after image sets → YOLO on samples returns instantly (the wow).
+- Both sets submitted to the **GPU node** in the background (real photogrammetry,
+  ~8 min/survey — too slow to wait for live, so show pre-staged DSM result and
+  narrate "running live in the background"; if the panel insists, let it finish).
+- When DSMs ready → volume (Z-corrected) → BOQ → S-curve.
+- **Must run on Zafar's machine** (app + WebODM + GPU node co-located).
+  Start with: `$env:WEBODM_PROJECT_ID="2"; $env:WEBODM_NODE_ID="2"; .\.venv\Scripts\python.exe finalV2.py`
+
+### Status
+- ✅ **App deployed to Zafar's machine** at `D:\ConstructionApp\Rozi Khan\construction_progress`.
+  Runs on the reused training venv (`D:\Construction Progress Monitoring Yolo Trained\.venv`,
+  CUDA torch) + `pip install flask rasterio openpyxl requests-toolbelt`.
+- ✅ **Full live flow VERIFIED end-to-end on Zafar's machine (2026-06-28):**
+  Start Fresh → upload before/after (SubBase) → YOLO detection preview → WebODM
+  submitted to **GPU node (id 2)** → volume (Z-corrected) → BOQ → S-curve. Success.
+  Launch: `cd` to the app dir, `$env:WEBODM_PROJECT_ID="2"; $env:WEBODM_NODE_ID="2"`,
+  run with the training-venv python. Requires WebODM stack + `docker start nodeodm-gpu`.
+
+### Remaining work
+1. **Phase 2 visuals** (future, high wow) — the main outstanding item:
+   orthomosaic JPEG preview, DSM heatmap, cut/fill heatmap overlay, Potree 3D
+   point-cloud viewer. All build on WebODM outputs we already download.
+2. **Detection domain gap** (known limitation, not a blocker) — model is strong
+   on training-style frames, weak on raw 84 MP nadir frames. For crisp demo
+   detection use training-style frames; long-term, retrain with full-res frames.
+3. **GCP limitation** (thesis note) — survey-grade absolute volumes need GCPs
+   (Min. 5 per methodology); Z-offset correction is the GCP-less best effort.
+
+---
+
 ## 1. Who & what
 
 **Project owner:** Rozi Khan (MS thesis student). His thesis title:

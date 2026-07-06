@@ -1,0 +1,503 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Construction Volume Analysis — Drone-based Progress Monitoring</title>
+
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800;900&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <script>
+    tailwind.config = {
+      theme: { extend: {
+        fontFamily: { sans: ["Geist","system-ui","sans-serif"], mono: ["Geist Mono","ui-monospace","monospace"] },
+        borderRadius: { DEFAULT:"4px", md:"4px", lg:"6px", xl:"8px", "2xl":"14px" },
+        colors: { brand: { DEFAULT:"#2563eb", dark:"#1d4ed8", light:"#eff6ff" } },
+      }},
+    };
+  </script>
+  <style>
+    html { scroll-behavior: smooth; }
+    body { font-family:"Geist",system-ui,sans-serif; -webkit-font-smoothing:antialiased; }
+    .mono { font-family:"Geist Mono",ui-monospace,monospace; }
+    .tnum { font-variant-numeric: tabular-nums; }
+    ::selection { background:#1d4ed8; color:#fff; }
+
+    /* scroll reveal */
+    .reveal { opacity:0; transform:translateY(26px); transition:opacity .8s cubic-bezier(.16,1,.3,1), transform .8s cubic-bezier(.16,1,.3,1); }
+    .reveal.in { opacity:1; transform:none; }
+
+    /* hero animated glow + topo drift */
+    @keyframes floaty { 0%,100%{ transform:translateY(0);} 50%{ transform:translateY(-14px);} }
+    @keyframes drift  { 0%{ transform:translate3d(0,0,0);} 100%{ transform:translate3d(-60px,-30px,0);} }
+    @keyframes glow   { 0%,100%{ opacity:.5; transform:scale(1);} 50%{ opacity:.85; transform:scale(1.08);} }
+    @keyframes dash   { to { stroke-dashoffset:0; } }
+    @keyframes bob    { 0%,100%{ transform:translateY(0);} 50%{ transform:translateY(8px);} }
+    .floaty { animation: floaty 6s ease-in-out infinite; }
+    .glow   { animation: glow 9s ease-in-out infinite; }
+    .drift  { animation: drift 40s linear infinite alternate; }
+    .bob    { animation: bob 2s ease-in-out infinite; }
+
+    /* top nav loading bar */
+    @keyframes navslide { 0%{ transform:translateX(-100%);} 100%{ transform:translateX(400%);} }
+    .navslide { animation: navslide 1s ease-in-out infinite; }
+
+    /* pipeline spine draw */
+    .spine { stroke-dasharray: 1; stroke-dashoffset: 1; }
+
+    @media (prefers-reduced-motion: reduce) {
+      .reveal { opacity:1 !important; transform:none !important; transition:none; }
+      .floaty,.glow,.drift,.bob,.navslide { animation:none !important; }
+      html { scroll-behavior:auto; }
+    }
+  </style>
+</head>
+<body class="bg-slate-950 text-slate-100">
+
+  <!-- top navigation loading bar -->
+  <div id="navLoader" class="pointer-events-none fixed inset-x-0 top-0 z-[60] h-0.5 overflow-hidden opacity-0 transition-opacity duration-150">
+    <div class="navslide h-full w-1/4 rounded-full bg-brand"></div>
+  </div>
+
+  <!-- ============================ NAV ============================ -->
+  <nav class="fixed inset-x-0 top-0 z-50 border-b border-white/10 bg-slate-950/70 backdrop-blur">
+    <div class="mx-auto flex h-[60px] max-w-[1200px] items-center justify-between px-6 md:px-8">
+      <a href="#top" class="flex items-center gap-2.5">
+        <span class="flex h-7 w-7 items-center justify-center rounded bg-brand">
+          <i data-lucide="mountain-snow" class="h-4 w-4 text-white"></i>
+        </span>
+        <span class="text-[15px] font-bold tracking-tight">Construction Volume Analysis</span>
+      </a>
+      <div class="hidden items-center gap-7 text-sm font-medium text-slate-300 md:flex">
+        <a href="#methodology" class="hover:text-white">Methodology</a>
+        <a href="#capabilities" class="hover:text-white">Capabilities</a>
+        <a href="#results" class="hover:text-white">Results</a>
+        <a href="/runs" class="hover:text-white">Past Analyses</a>
+      </div>
+      <a href="/app" class="inline-flex items-center gap-2 rounded bg-brand px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-dark">
+        Launch App <i data-lucide="arrow-right" class="h-4 w-4"></i>
+      </a>
+    </div>
+  </nav>
+
+  <!-- ============================ HERO ============================ -->
+  <header id="top" class="relative overflow-hidden">
+    <!-- background image + overlays -->
+    <div class="absolute inset-0">
+      <img data-img="hero" alt="" class="h-full w-full object-cover opacity-40"
+           onerror="this.style.display='none'">
+      <div class="absolute inset-0 bg-gradient-to-b from-slate-950/70 via-slate-950/80 to-slate-950"></div>
+      <div class="absolute inset-0 bg-[radial-gradient(60%_50%_at_70%_10%,rgba(37,99,235,0.30),transparent)]"></div>
+    </div>
+    <!-- animated topographic survey lines -->
+    <svg class="drift absolute inset-0 h-[130%] w-[130%] opacity-[0.15]" preserveAspectRatio="none" viewBox="0 0 800 600" aria-hidden="true">
+      <g fill="none" stroke="#60a5fa" stroke-width="1">
+        <path d="M0 120 Q 200 60 400 120 T 800 120"/>
+        <path d="M0 200 Q 200 140 400 200 T 800 200"/>
+        <path d="M0 280 Q 200 220 400 280 T 800 280"/>
+        <path d="M0 360 Q 200 300 400 360 T 800 360"/>
+        <path d="M0 440 Q 200 380 400 440 T 800 440"/>
+        <path d="M0 520 Q 200 460 400 520 T 800 520"/>
+      </g>
+    </svg>
+    <!-- glow blob -->
+    <div class="glow absolute -right-32 top-10 h-96 w-96 rounded-full bg-brand/30 blur-3xl"></div>
+
+    <div class="relative mx-auto max-w-[1200px] px-6 pb-24 pt-40 md:px-8 md:pb-32 md:pt-48">
+      <div class="max-w-3xl">
+        <span data-r class="reveal inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/5 px-3.5 py-1.5 text-xs font-semibold uppercase tracking-wider text-blue-200">
+          <span class="h-1.5 w-1.5 rounded-full bg-brand"></span>
+          MS Research · Civil Engineering × AI
+        </span>
+        <h1 data-r class="reveal mt-6 text-4xl font-extrabold leading-[1.05] tracking-tight md:text-6xl">
+          Drone imagery to<br><span class="bg-gradient-to-r from-blue-300 via-blue-400 to-cyan-300 bg-clip-text text-transparent">measured progress.</span>
+        </h1>
+        <p data-r class="reveal mt-6 max-w-2xl text-lg leading-relaxed text-slate-300">
+          An automated pipeline that turns before/after drone surveys of road and highway sites
+          into geo-accurate earthwork volumes, AI-detected road layers, costed bills of quantities,
+          and S-curve progress — backed by a 3D digital twin.
+        </p>
+        <div data-r class="reveal mt-9 flex flex-wrap items-center gap-3">
+          <a href="/app" class="inline-flex items-center gap-2 rounded-lg bg-brand px-6 py-3.5 text-sm font-semibold text-white shadow-lg shadow-brand/30 transition hover:bg-brand-dark">
+            <i data-lucide="play" class="h-4 w-4"></i> Launch the App
+          </a>
+          <a href="#methodology" class="inline-flex items-center gap-2 rounded-lg border border-white/15 bg-white/5 px-6 py-3.5 text-sm font-semibold text-white transition hover:bg-white/10">
+            Explore the Methodology <i data-lucide="arrow-down" class="h-4 w-4"></i>
+          </a>
+        </div>
+        <div data-r class="reveal mt-8 flex items-center gap-3 text-sm text-slate-400">
+          <span class="flex h-8 w-8 items-center justify-center rounded-full bg-white/10 text-xs font-bold">ZK</span>
+          Research by <span class="font-semibold text-slate-200">Zafar Khan</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- stat strip -->
+    <div class="relative border-t border-white/10 bg-slate-950/60">
+      <div class="mx-auto grid max-w-[1200px] grid-cols-2 divide-x divide-white/10 px-6 md:grid-cols-4 md:px-8">
+        <div class="px-2 py-6 text-center md:py-8">
+          <div class="mono tnum text-3xl font-bold text-white"><span data-count="96" data-suffix="%">0</span></div>
+          <div class="mt-1 text-xs text-slate-400">Detection mAP50</div>
+        </div>
+        <div class="px-2 py-6 text-center md:py-8">
+          <div class="mono tnum text-3xl font-bold text-white"><span data-count="3">0</span></div>
+          <div class="mt-1 text-xs text-slate-400">Road-layer classes</div>
+        </div>
+        <div class="px-2 py-6 text-center md:py-8">
+          <div class="mono tnum text-3xl font-bold text-white">~<span data-count="8">0</span></div>
+          <div class="mt-1 text-xs text-slate-400">Min / survey (GPU)</div>
+        </div>
+        <div class="px-2 py-6 text-center md:py-8">
+          <div class="mono tnum text-3xl font-bold text-white">m³</div>
+          <div class="mt-1 text-xs text-slate-400">Volume precision</div>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- ============================ PROBLEM ============================ -->
+  <section class="bg-white py-24 text-slate-900">
+    <div class="mx-auto max-w-[1200px] px-6 md:px-8">
+      <div class="grid gap-12 lg:grid-cols-2 lg:items-center">
+        <div data-r class="reveal">
+          <span class="text-xs font-semibold uppercase tracking-wider text-brand">The problem</span>
+          <h2 class="mt-3 text-3xl font-bold tracking-tight md:text-4xl">Site monitoring today is manual, slow, and subjective.</h2>
+          <p class="mt-5 text-lg leading-relaxed text-slate-500">
+            Quantity surveys rely on tape, level, and spreadsheets. Progress is estimated by eye,
+            volumes are approximated, and reporting lags weeks behind reality — costly on
+            highway-scale earthwork where a single layer spans kilometres.
+          </p>
+        </div>
+        <div data-r class="reveal grid gap-4 sm:grid-cols-1">
+          <div class="flex items-start gap-4 rounded-xl border border-slate-200 p-5">
+            <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-red-50"><i data-lucide="clock" class="h-5 w-5 text-red-500"></i></span>
+            <div><div class="font-semibold">Weeks of lag</div><p class="mt-1 text-sm text-slate-500">Manual measurement and reconciliation delay every progress claim.</p></div>
+          </div>
+          <div class="flex items-start gap-4 rounded-xl border border-slate-200 p-5">
+            <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-amber-50"><i data-lucide="ruler" class="h-5 w-5 text-amber-500"></i></span>
+            <div><div class="font-semibold">Approximate volumes</div><p class="mt-1 text-sm text-slate-500">Cross-section estimates miss the true shape of cut and fill.</p></div>
+          </div>
+          <div class="flex items-start gap-4 rounded-xl border border-slate-200 p-5">
+            <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-slate-100"><i data-lucide="user-x" class="h-5 w-5 text-slate-500"></i></span>
+            <div><div class="font-semibold">Subjective calls</div><p class="mt-1 text-sm text-slate-500">"Which layer, how far along?" is judged by eye, not measured.</p></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================ METHODOLOGY ============================ -->
+  <section id="methodology" class="relative bg-slate-950 py-24">
+    <div class="mx-auto max-w-[1200px] px-6 md:px-8">
+      <div data-r class="reveal mx-auto max-w-2xl text-center">
+        <span class="text-xs font-semibold uppercase tracking-wider text-blue-300">The methodology</span>
+        <h2 class="mt-3 text-3xl font-bold tracking-tight md:text-4xl">From flight to costed progress, automatically</h2>
+        <p class="mt-4 text-lg text-slate-400">Seven stages take a pair of drone surveys and return objective, geo-accurate numbers.</p>
+      </div>
+
+      <div class="relative mx-auto mt-16 max-w-3xl">
+        <!-- vertical spine -->
+        <div class="absolute left-[27px] top-2 bottom-2 w-px bg-gradient-to-b from-brand via-blue-500/40 to-transparent md:left-1/2"></div>
+
+        <ol class="space-y-6">
+          <!-- step template -->
+          <li data-r class="reveal relative flex gap-5 md:justify-start">
+            <span class="relative z-10 flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border border-white/10 bg-slate-900 text-blue-300 shadow-lg shadow-black/40">
+              <i data-lucide="plane" class="h-6 w-6"></i>
+            </span>
+            <div class="flex-1 rounded-xl border border-white/10 bg-slate-900/60 p-5">
+              <div class="mono text-xs font-semibold text-blue-400">STEP 01</div>
+              <h3 class="mt-1 text-lg font-semibold text-white">Drone data capture</h3>
+              <p class="mt-1.5 text-sm leading-relaxed text-slate-400">High-overlap aerial imagery of the site is flown before and after a construction interval.</p>
+            </div>
+          </li>
+          <li data-r class="reveal relative flex gap-5">
+            <span class="relative z-10 flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border border-white/10 bg-slate-900 text-blue-300 shadow-lg shadow-black/40">
+              <i data-lucide="boxes" class="h-6 w-6"></i>
+            </span>
+            <div class="flex-1 rounded-xl border border-white/10 bg-slate-900/60 p-5">
+              <div class="mono text-xs font-semibold text-blue-400">STEP 02</div>
+              <h3 class="mt-1 text-lg font-semibold text-white">Photogrammetry &amp; digital twin</h3>
+              <p class="mt-1.5 text-sm leading-relaxed text-slate-400">WebODM / OpenDroneMap reconstructs a 3D point cloud, DSM, and orthomosaic — a true digital twin of the site.</p>
+            </div>
+          </li>
+          <li data-r class="reveal relative flex gap-5">
+            <span class="relative z-10 flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border border-white/10 bg-slate-900 text-blue-300 shadow-lg shadow-black/40">
+              <i data-lucide="mountain-snow" class="h-6 w-6"></i>
+            </span>
+            <div class="flex-1 rounded-xl border border-white/10 bg-slate-900/60 p-5">
+              <div class="mono text-xs font-semibold text-blue-400">STEP 03</div>
+              <h3 class="mt-1 text-lg font-semibold text-white">Digital Surface Model</h3>
+              <p class="mt-1.5 text-sm leading-relaxed text-slate-400">A geo-referenced elevation surface captures the exact terrain height at every point of each survey.</p>
+            </div>
+          </li>
+          <li data-r class="reveal relative flex gap-5">
+            <span class="relative z-10 flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border border-white/10 bg-slate-900 text-blue-300 shadow-lg shadow-black/40">
+              <i data-lucide="layers" class="h-6 w-6"></i>
+            </span>
+            <div class="flex-1 rounded-xl border border-white/10 bg-slate-900/60 p-5">
+              <div class="mono text-xs font-semibold text-blue-400">STEP 04</div>
+              <h3 class="mt-1 text-lg font-semibold text-white">Earthwork volume (cut / fill)</h3>
+              <p class="mt-1.5 text-sm leading-relaxed text-slate-400">A geo-aware calculation differences the before/after DSMs to measure moved material in m³, with a Z-offset datum correction.</p>
+            </div>
+          </li>
+          <li data-r class="reveal relative flex gap-5">
+            <span class="relative z-10 flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border border-white/10 bg-slate-900 text-blue-300 shadow-lg shadow-black/40">
+              <i data-lucide="scan-eye" class="h-6 w-6"></i>
+            </span>
+            <div class="flex-1 rounded-xl border border-white/10 bg-slate-900/60 p-5">
+              <div class="mono text-xs font-semibold text-blue-400">STEP 05</div>
+              <h3 class="mt-1 text-lg font-semibold text-white">AI road-layer detection</h3>
+              <p class="mt-1.5 text-sm leading-relaxed text-slate-400">A custom YOLO26 segmentation model identifies the construction stage — Sub Base, Aggregate Base Course, or Asphalt — at mAP50 ≈ 0.96.</p>
+            </div>
+          </li>
+          <li data-r class="reveal relative flex gap-5">
+            <span class="relative z-10 flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border border-white/10 bg-slate-900 text-blue-300 shadow-lg shadow-black/40">
+              <i data-lucide="calculator" class="h-6 w-6"></i>
+            </span>
+            <div class="flex-1 rounded-xl border border-white/10 bg-slate-900/60 p-5">
+              <div class="mono text-xs font-semibold text-blue-400">STEP 06</div>
+              <h3 class="mt-1 text-lg font-semibold text-white">Bill of Quantities</h3>
+              <p class="mt-1.5 text-sm leading-relaxed text-slate-400">Measured volume is multiplied by editable PKR unit rates per detected layer to produce a costed BOQ.</p>
+            </div>
+          </li>
+          <li data-r class="reveal relative flex gap-5">
+            <span class="relative z-10 flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border border-white/10 bg-slate-900 text-blue-300 shadow-lg shadow-black/40">
+              <i data-lucide="trending-up" class="h-6 w-6"></i>
+            </span>
+            <div class="flex-1 rounded-xl border border-white/10 bg-slate-900/60 p-5">
+              <div class="mono text-xs font-semibold text-blue-400">STEP 07</div>
+              <h3 class="mt-1 text-lg font-semibold text-white">S-curve progress &amp; report</h3>
+              <p class="mt-1.5 text-sm leading-relaxed text-slate-400">Planned vs. actual spend is tracked on an S-curve, and the full analysis exports to an Excel report.</p>
+            </div>
+          </li>
+        </ol>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================ CAPABILITIES ============================ -->
+  <section id="capabilities" class="bg-white py-24 text-slate-900">
+    <div class="mx-auto max-w-[1200px] px-6 md:px-8">
+      <div data-r class="reveal max-w-2xl">
+        <span class="text-xs font-semibold uppercase tracking-wider text-brand">Capabilities</span>
+        <h2 class="mt-3 text-3xl font-bold tracking-tight md:text-4xl">Everything the pipeline delivers</h2>
+      </div>
+      <div class="mt-12 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+        <div data-r class="reveal rounded-2xl border border-slate-200 p-6 transition hover:border-brand hover:shadow-lg hover:shadow-brand/5">
+          <span class="flex h-11 w-11 items-center justify-center rounded-lg bg-brand-light"><i data-lucide="box" class="h-5 w-5 text-brand"></i></span>
+          <h3 class="mt-4 text-lg font-semibold">Digital-twin reconstruction</h3>
+          <p class="mt-2 text-sm leading-relaxed text-slate-500">Point cloud, DSM, and orthomosaic from raw imagery — the site, rebuilt in 3D.</p>
+        </div>
+        <div data-r class="reveal rounded-2xl border border-slate-200 p-6 transition hover:border-brand hover:shadow-lg hover:shadow-brand/5">
+          <span class="flex h-11 w-11 items-center justify-center rounded-lg bg-brand-light"><i data-lucide="scan-eye" class="h-5 w-5 text-brand"></i></span>
+          <h3 class="mt-4 text-lg font-semibold">AI road-layer detection</h3>
+          <p class="mt-2 text-sm leading-relaxed text-slate-500">A trained YOLO26 segmentation model reads the construction stage from the imagery.</p>
+        </div>
+        <div data-r class="reveal rounded-2xl border border-slate-200 p-6 transition hover:border-brand hover:shadow-lg hover:shadow-brand/5">
+          <span class="flex h-11 w-11 items-center justify-center rounded-lg bg-brand-light"><i data-lucide="mountain-snow" class="h-5 w-5 text-brand"></i></span>
+          <h3 class="mt-4 text-lg font-semibold">Geo-accurate volumes</h3>
+          <p class="mt-2 text-sm leading-relaxed text-slate-500">Cut/fill differenced on a common grid with a vertical datum correction — measured, not estimated.</p>
+        </div>
+        <div data-r class="reveal rounded-2xl border border-slate-200 p-6 transition hover:border-brand hover:shadow-lg hover:shadow-brand/5">
+          <span class="flex h-11 w-11 items-center justify-center rounded-lg bg-brand-light"><i data-lucide="calculator" class="h-5 w-5 text-brand"></i></span>
+          <h3 class="mt-4 text-lg font-semibold">Automated BOQ</h3>
+          <p class="mt-2 text-sm leading-relaxed text-slate-500">Editable PKR rates per layer turn volume into a line-item bill of quantities.</p>
+        </div>
+        <div data-r class="reveal rounded-2xl border border-slate-200 p-6 transition hover:border-brand hover:shadow-lg hover:shadow-brand/5">
+          <span class="flex h-11 w-11 items-center justify-center rounded-lg bg-brand-light"><i data-lucide="trending-up" class="h-5 w-5 text-brand"></i></span>
+          <h3 class="mt-4 text-lg font-semibold">S-curve tracking</h3>
+          <p class="mt-2 text-sm leading-relaxed text-slate-500">Planned vs. actual spend with a performance index across survey time-points.</p>
+        </div>
+        <div data-r class="reveal rounded-2xl border border-slate-200 p-6 transition hover:border-brand hover:shadow-lg hover:shadow-brand/5">
+          <span class="flex h-11 w-11 items-center justify-center rounded-lg bg-brand-light"><i data-lucide="file-spreadsheet" class="h-5 w-5 text-brand"></i></span>
+          <h3 class="mt-4 text-lg font-semibold">One-click Excel report</h3>
+          <p class="mt-2 text-sm leading-relaxed text-slate-500">Summary, BOQ, and S-curve exported to a shareable workbook.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================ GALLERY ============================ -->
+  <section class="bg-slate-950 py-24">
+    <div class="mx-auto max-w-[1200px] px-6 md:px-8">
+      <div data-r class="reveal max-w-2xl">
+        <span class="text-xs font-semibold uppercase tracking-wider text-blue-300">From the field</span>
+        <h2 class="mt-3 text-3xl font-bold tracking-tight text-white md:text-4xl">Aerial capture, above the earthwork</h2>
+      </div>
+      <div class="mt-12 grid gap-4 md:grid-cols-3">
+        <figure data-r class="reveal group relative col-span-2 overflow-hidden rounded-2xl border border-white/10 md:row-span-2">
+          <img data-img="g1" alt="Aerial view of a road corridor" class="h-full w-full object-cover transition duration-700 group-hover:scale-105" onerror="this.closest('figure').style.background='#0f172a'">
+          <figcaption class="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-slate-950/90 to-transparent p-5 text-sm font-medium text-white">Road corridor — aerial survey</figcaption>
+        </figure>
+        <figure data-r class="reveal group relative overflow-hidden rounded-2xl border border-white/10">
+          <img data-img="g2" alt="Aerial view of heavy earthwork equipment" class="h-56 w-full object-cover transition duration-700 group-hover:scale-105" onerror="this.closest('figure').style.background='#0f172a'">
+          <figcaption class="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-slate-950/90 to-transparent p-4 text-sm font-medium text-white">Earthwork in progress</figcaption>
+        </figure>
+        <figure data-r class="reveal group relative overflow-hidden rounded-2xl border border-white/10">
+          <img data-img="g3" alt="Aerial view of a construction site" class="h-56 w-full object-cover transition duration-700 group-hover:scale-105" onerror="this.closest('figure').style.background='#0f172a'">
+          <figcaption class="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-slate-950/90 to-transparent p-4 text-sm font-medium text-white">Site reconstruction</figcaption>
+        </figure>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================ RESULTS ============================ -->
+  <section id="results" class="bg-white py-24 text-slate-900">
+    <div class="mx-auto max-w-[1200px] px-6 md:px-8">
+      <div data-r class="reveal mx-auto max-w-2xl text-center">
+        <span class="text-xs font-semibold uppercase tracking-wider text-brand">Validated results</span>
+        <h2 class="mt-3 text-3xl font-bold tracking-tight md:text-4xl">Trained, tested, and measured</h2>
+      </div>
+      <div class="mt-14 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
+        <div data-r class="reveal rounded-2xl bg-slate-900 p-7 text-center text-white">
+          <div class="mono tnum text-4xl font-bold"><span data-count="96" data-suffix="%">0</span></div>
+          <div class="mt-2 text-sm text-slate-400">Segmentation mAP50</div>
+        </div>
+        <div data-r class="reveal rounded-2xl border border-slate-200 p-7 text-center">
+          <div class="mono tnum text-4xl font-bold text-slate-900"><span data-count="100">0</span></div>
+          <div class="mt-2 text-sm text-slate-500">Training epochs</div>
+        </div>
+        <div data-r class="reveal rounded-2xl border border-slate-200 p-7 text-center">
+          <div class="mono tnum text-4xl font-bold text-slate-900"><span data-count="422">0</span></div>
+          <div class="mt-2 text-sm text-slate-500">Annotated images</div>
+        </div>
+        <div data-r class="reveal rounded-2xl border border-slate-200 p-7 text-center">
+          <div class="mono tnum text-4xl font-bold text-slate-900">~<span data-count="9">0</span><span class="text-2xl"> ms</span></div>
+          <div class="mt-2 text-sm text-slate-500">Inference / image</div>
+        </div>
+      </div>
+
+      <!-- tech stack -->
+      <div data-r class="reveal mt-16 text-center">
+        <div class="text-xs font-semibold uppercase tracking-wider text-slate-400">Built with</div>
+        <div class="mt-5 flex flex-wrap items-center justify-center gap-2.5">
+          <span class="mono rounded-full border border-slate-200 bg-slate-50 px-4 py-2 text-sm text-slate-600">Python</span>
+          <span class="mono rounded-full border border-slate-200 bg-slate-50 px-4 py-2 text-sm text-slate-600">Flask</span>
+          <span class="mono rounded-full border border-slate-200 bg-slate-50 px-4 py-2 text-sm text-slate-600">WebODM / OpenDroneMap</span>
+          <span class="mono rounded-full border border-slate-200 bg-slate-50 px-4 py-2 text-sm text-slate-600">YOLO26-seg · Ultralytics</span>
+          <span class="mono rounded-full border border-slate-200 bg-slate-50 px-4 py-2 text-sm text-slate-600">rasterio</span>
+          <span class="mono rounded-full border border-slate-200 bg-slate-50 px-4 py-2 text-sm text-slate-600">OpenCV</span>
+          <span class="mono rounded-full border border-slate-200 bg-slate-50 px-4 py-2 text-sm text-slate-600">matplotlib</span>
+          <span class="mono rounded-full border border-slate-200 bg-slate-50 px-4 py-2 text-sm text-slate-600">Docker</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================ CTA ============================ -->
+  <section class="relative overflow-hidden bg-slate-950 py-24">
+    <div class="glow absolute left-1/2 top-1/2 h-80 w-[40rem] -translate-x-1/2 -translate-y-1/2 rounded-full bg-brand/25 blur-3xl"></div>
+    <div class="relative mx-auto max-w-[1200px] px-6 text-center md:px-8">
+      <h2 data-r class="reveal text-3xl font-bold tracking-tight text-white md:text-5xl">See it run on a real survey</h2>
+      <p data-r class="reveal mx-auto mt-4 max-w-xl text-lg text-slate-400">Upload before/after drone data — or existing 3D outputs — and get volume, cost, and progress in minutes.</p>
+      <div data-r class="reveal mt-9 flex flex-wrap items-center justify-center gap-3">
+        <a href="/app" class="inline-flex items-center gap-2 rounded-lg bg-brand px-7 py-4 text-sm font-semibold text-white shadow-lg shadow-brand/30 transition hover:bg-brand-dark">
+          <i data-lucide="play" class="h-4 w-4"></i> Launch the App
+        </a>
+        <a href="/runs" class="inline-flex items-center gap-2 rounded-lg border border-white/15 bg-white/5 px-7 py-4 text-sm font-semibold text-white transition hover:bg-white/10">
+          <i data-lucide="folder-open" class="h-4 w-4"></i> View Past Analyses
+        </a>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================ FOOTER ============================ -->
+  <footer class="border-t border-white/10 bg-slate-950 py-12">
+    <div class="mx-auto max-w-[1200px] px-6 md:px-8">
+      <div class="flex flex-col items-start justify-between gap-6 md:flex-row md:items-center">
+        <div class="flex items-center gap-2.5">
+          <span class="flex h-7 w-7 items-center justify-center rounded bg-brand"><i data-lucide="mountain-snow" class="h-4 w-4 text-white"></i></span>
+          <span class="text-sm font-bold">Construction Volume Analysis</span>
+        </div>
+        <div class="flex items-center gap-6 text-sm text-slate-400">
+          <a href="#methodology" class="hover:text-white">Methodology</a>
+          <a href="/app" class="hover:text-white">Launch App</a>
+          <a href="/runs" class="hover:text-white">Past Analyses</a>
+        </div>
+      </div>
+      <div class="mt-8 max-w-3xl border-t border-white/10 pt-6 text-sm leading-relaxed text-slate-500">
+        MS thesis — <span class="text-slate-300">“Automating the Project Monitoring System for Roads, Highway, and Infrastructure
+        Projects using Machine Learning, AI, Web Application, and Digital Twin Techniques.”</span>
+        Research by Zafar Khan · <span class="mono">© <span id="yr">2026</span></span>
+      </div>
+    </div>
+  </footer>
+
+  <!-- ============================ SCRIPT ============================ -->
+  <script>
+  (function () {
+    "use strict";
+
+    // ---- imagery (swap these URLs to change every photo on the page) ----
+    const IMG = {
+      hero: "https://images.unsplash.com/photo-1487214626629-b7eaa70441b2?auto=format&fit=crop&w=2000&q=80",
+      g1:   "https://images.unsplash.com/photo-1487214626629-b7eaa70441b2?auto=format&fit=crop&w=1400&q=80",
+      g2:   "https://images.unsplash.com/photo-1517089472343-85fc51aeb327?auto=format&fit=crop&w=900&q=80",
+      g3:   "https://images.unsplash.com/photo-1686358244616-aed9e9a1d827?auto=format&fit=crop&w=900&q=80",
+    };
+    document.querySelectorAll("[data-img]").forEach(el => {
+      const key = el.getAttribute("data-img");
+      if (IMG[key]) el.src = IMG[key];
+    });
+
+    // ---- icons ----
+    try { lucide.createIcons(); } catch (e) {}
+
+    // ---- year ----
+    try { document.getElementById("yr").textContent = new Date().getFullYear(); } catch (e) {}
+
+    // ---- scroll reveal (staggered per group) ----
+    const revealEls = Array.from(document.querySelectorAll(".reveal"));
+    const io = new IntersectionObserver((entries) => {
+      entries.forEach(e => {
+        if (e.isIntersecting) {
+          const sibs = Array.from(e.target.parentElement.querySelectorAll(":scope > .reveal"));
+          const idx = Math.max(0, sibs.indexOf(e.target));
+          e.target.style.transitionDelay = Math.min(idx * 80, 400) + "ms";
+          e.target.classList.add("in");
+          io.unobserve(e.target);
+        }
+      });
+    }, { threshold: 0.12 });
+    revealEls.forEach(el => io.observe(el));
+
+    // ---- count-up metrics ----
+    const counters = Array.from(document.querySelectorAll("[data-count]"));
+    const cio = new IntersectionObserver((entries) => {
+      entries.forEach(e => {
+        if (!e.isIntersecting) return;
+        const el = e.target, target = parseFloat(el.getAttribute("data-count")) || 0;
+        const suffix = el.getAttribute("data-suffix") || "";
+        const dur = 1200, t0 = performance.now();
+        const tick = (t) => {
+          const p = Math.min(1, (t - t0) / dur);
+          const eased = 1 - Math.pow(1 - p, 3);
+          el.textContent = Math.round(target * eased) + suffix;
+          if (p < 1) requestAnimationFrame(tick);
+          else el.textContent = target + suffix;
+        };
+        requestAnimationFrame(tick);
+        cio.unobserve(el);
+      });
+    }, { threshold: 0.6 });
+    counters.forEach(el => cio.observe(el));
+
+    // ---- nav loading bar on internal navigation ----
+    const nav = document.getElementById("navLoader");
+    document.addEventListener("click", (e) => {
+      const a = e.target.closest("a[href]");
+      if (!a) return;
+      const href = a.getAttribute("href");
+      if (a.target || a.hasAttribute("download") || !href || href.charAt(0) === "#") return;
+      if (a.origin !== location.origin) return;
+      if (nav) nav.style.opacity = "1";
+    });
+    window.addEventListener("pageshow", () => { if (nav) nav.style.opacity = "0"; });
+  })();
+  </script>
+</body>
+</html>

@@ -14,13 +14,18 @@ ultralytics>=8.1
 opencv-python>=4.9
 numpy>=1.26
 
+# Orthomosaic preview: GeoTIFF -> web JPG (imported directly by ortho_preview.py)
+Pillow>=10.0
+
 # Reporting - Excel export (Phase 6)
 openpyxl>=3.1
 
 # Charts - S-curve generation (Phase 6)
 matplotlib>=3.8
 
-# --- Optional ---
-# GDAL/rasterio give the most accurate DEM volume math, but are hard to install
-# on Windows. The app falls back to CloudCompare's volume tool if these are absent.
-# rasterio>=1.3
+# Geo-aware DEM volume math (required - the primary volume method + Z-offset
+# correction live here). Installs cleanly on Windows via pip wheels.
+rasterio>=1.3
+
+# Upload progress for the WebODM submit helper scripts
+requests-toolbelt>=1.0

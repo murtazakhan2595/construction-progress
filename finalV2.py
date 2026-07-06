@@ -22,6 +22,7 @@ from cost import build_boq
 from scurve import generate_planned_curve, build_scurve, render_scurve_png
 from progress import record_progress, actual_cumulative
 from report_excel import build_excel_report
+from ortho_preview import generate_orthophoto_preview
 import config_store
 
 app = Flask(__name__)
@@ -71,6 +72,9 @@ WEBODM_AUTH = (
     os.environ.get("WEBODM_PASSWORD", "admin"),
 )
 PROJECT_ID = int(os.environ.get("WEBODM_PROJECT_ID", "1"))  # WebODM project ID
+# Pin tasks to a specific processing node (e.g. the GPU NodeODM node). When set,
+# auto_processing_node is disabled so jobs always go to this node. None = auto.
+WEBODM_NODE_ID = os.environ.get("WEBODM_NODE_ID")
 # Max time (s) to wait for a WebODM task to finish - 6h covers most CPU runs.
 WEBODM_TASK_TIMEOUT = int(os.environ.get("WEBODM_TASK_TIMEOUT", "21600"))
 
@@ -274,22 +278,28 @@ class ConstructionVolumeAnalyzer:
         url = f"{WEBODM_URL}/projects/{PROJECT_ID}/tasks/"
         
         files = []
-        # Enhanced processing options for better DSM/DTM generation
+        # Memory-safe processing options (validated on the GPU node with 84 MP
+        # images at 24-26 GB WSL RAM). high pc-quality OOMs on large frames;
+        # medium + resize-to 2048 produces a solid DSM without crashing.
+        # Resolutions are in cm/px (ODM convention). DSM is what the volume
+        # calc consumes; the 3D model/mesh is not needed for volume.
         data = {
             'name': f'{phase}_{self.task_id}_{datetime.now().strftime("%Y%m%d_%H%M%S")}',
             'options': json.dumps([
-                {'name': 'mesh-size', 'value': '300000'},
-                {'name': 'mesh-octree-depth', 'value': '10'},
-                {'name': 'feature-quality', 'value': 'high'},
-                {'name': 'pc-quality', 'value': 'high'},
-                {'name': 'dsm', 'value': True},  # Enable DSM generation
-                {'name': 'dtm', 'value': True},  # Enable DTM generation
-                {'name': 'dem-resolution', 'value': str(self.processing_options.get("dem_resolution", 0.1))},
-                {'name': 'orthophoto-resolution', 'value': str(self.processing_options.get("dem_resolution", 0.1))},
-                {'name': 'pc-filter', 'value': '2.5'},  # Point cloud filtering
-                {'name': 'pc-sample', 'value': '0'}  # No point cloud sampling
+                {'name': 'feature-quality', 'value': 'medium'},
+                {'name': 'pc-quality', 'value': 'medium'},
+                {'name': 'dsm', 'value': True},
+                {'name': 'dtm', 'value': True},
+                {'name': 'dem-resolution', 'value': '5'},
+                {'name': 'orthophoto-resolution', 'value': '5'},
+                {'name': 'resize-to', 'value': '2048'},
+                {'name': 'max-concurrency', 'value': '4'},
             ])
         }
+        # Pin to the GPU node when configured (else WebODM auto-assigns).
+        if WEBODM_NODE_ID:
+            data['processing_node'] = WEBODM_NODE_ID
+            data['auto_processing_node'] = 'false'
         
         try:
             # Add images
@@ -734,12 +744,29 @@ class ConstructionVolumeAnalyzer:
                 valid = (b_grid != NODATA) & (a_grid != NODATA)
                 valid &= np_.isfinite(b_grid) & np_.isfinite(a_grid)
                 diff = a_grid.astype("float64") - b_grid.astype("float64")
+
+                # --- Vertical datum (Z) offset correction --------------------
+                # Without GCPs, the before/after DSMs are independent
+                # reconstructions whose absolute elevations drift by a constant
+                # offset (often metres). Left uncorrected this offset is summed
+                # over the whole area and dwarfs the real construction signal.
+                # Subtract the median over-overlap difference (robust estimate
+                # of that constant offset) so only genuine change is integrated.
+                # NOTE: this is a best-effort fix; survey-grade volumes still
+                # require GCPs (see methodology). Toggle via processing option.
+                z_offset = 0.0
+                if self.processing_options.get("z_offset_correction", True):
+                    vd = diff[valid]
+                    if vd.size:
+                        z_offset = float(np_.median(vd))
+                        diff = diff - z_offset
+
                 diff[~valid] = 0.0
                 volume = float(diff.sum()) * cell_area
                 logging.info(
                     f"rasterio volume (geo-aware): {volume:.3f} m^3, cell "
                     f"{res:.3f} m, grid {width}x{height}, overlap cells "
-                    f"{int(valid.sum())}/{valid.size}"
+                    f"{int(valid.sum())}/{valid.size}, z_offset {z_offset:.3f} m"
                 )
                 return volume
         except ImportError:
@@ -1060,6 +1087,18 @@ class ConstructionVolumeAnalyzer:
         except Exception as e:
             logging.error(f"S-curve render failed: {e}")
 
+        # Orthomosaic previews: downscale the before/after orthophoto GeoTIFFs
+        # to web JPGs and expose them like the S-curve PNG. Absent in
+        # existing-DSM mode (no orthophoto) — the UI hides the card then.
+        for phase, assets in (("before", before_assets), ("after", after_assets)):
+            ortho = assets.get("orthophoto")
+            if ortho and os.path.exists(ortho):
+                out_jpg = os.path.join(RESULTS_FOLDER,
+                                       f"ortho_{phase}_{self.task_id}.jpg")
+                if generate_orthophoto_preview(ortho, out_jpg):
+                    report[f"orthophoto_{phase}"] = \
+                        f"/result-file/ortho_{phase}_{self.task_id}.jpg"
+
         # Save report to file
         report_path = os.path.join(RESULTS_FOLDER, f"analysis_report_{self.task_id}.json")
         with open(report_path, 'w') as f:
@@ -1094,6 +1133,10 @@ class ConstructionVolumeAnalyzer:
 
 # Flask Routes (keeping existing routes)
 @app.route('/')
+def landing():
+    return render_template("landing.html")
+
+@app.route('/app')
 def index():
     return render_template("construction_volume.html")
 
@@ -1129,23 +1172,36 @@ def upload():
             gcp_file.save(gcp_path)
             logging.info(f"Saved GCP file: {gcp_path}")
         
-        # Optional: Run object detection for preview
+        # Road-layer detection on a sample of each set. The dominant stage in
+        # BEFORE vs AFTER, and the change between them, is the "site change"
+        # signal from the methodology (AI Detection stage).
         detection_results = {}
+        detection_summary = {}
         if YOLO_AVAILABLE and request.form.get('enable_detection') == 'true':
-            detection_results = {
-                "before": detect_objects(before_paths[0], "before"),
-                "after": detect_objects(after_paths[0], "after")
+            before_sum = detect_layer_summary(before_paths, "before")
+            after_sum = detect_layer_summary(after_paths, "after")
+            detection_results = {"before": before_sum, "after": after_sum}
+            b, a = before_sum["dominant"], after_sum["dominant"]
+            changed = bool(b and a and b != a)
+            detection_summary = {
+                "before_layer": b or "None",
+                "after_layer": a or "None",
+                "changed": changed,
+                "verdict": (
+                    f"{b} → {a}: new layer detected — progress confirmed"
+                    if changed else
+                    (f"{a}: same stage — no new layer detected" if a
+                     else "No road layers detected")
+                ),
             }
-        
+
         # Start background processing
         task_id = str(uuid.uuid4())
         analyzer = ConstructionVolumeAnalyzer(task_id)
 
-        # Attach road-layer detections (used later for the cost breakdown)
-        if detection_results:
-            after_res = detection_results.get("after")
-            if after_res:
-                analyzer.detected_layers = after_res.get("detections", [])
+        # Attach AFTER-set detections (used later for the cost breakdown)
+        if detection_results.get("after"):
+            analyzer.detected_layers = detection_results["after"].get("detections", [])
 
         thread = threading.Thread(
             target=analyzer.process_construction_analysis,
@@ -1165,11 +1221,13 @@ def upload():
             response_data["detection_results"] = {}
             for phase in ("before", "after"):
                 res = detection_results.get(phase)
-                if res and res.get("image_path"):
+                if res and res.get("preview"):
                     response_data["detection_results"][phase] = {
-                        "image": f"/result-file/{os.path.basename(res['image_path'])}",
-                        "detections": res["detections"],
+                        "image": f"/result-file/{os.path.basename(res['preview'])}",
+                        "dominant": res.get("dominant"),
+                        "detections": res.get("detections", []),
                     }
+            response_data["detection_summary"] = detection_summary
         
         return jsonify(response_data)
         
@@ -1228,28 +1286,31 @@ def get_task_status(task_id):
 
 @app.route('/results/<task_id>')
 def get_task_results(task_id):
-    """Get detailed results for a completed task"""
-    if task_id not in task_status_store:
-        return jsonify({"error": "Task not found"}), 404
-        
-    status_info = task_status_store[task_id]
-    
-    if status_info["status"] != "completed":
-        return jsonify({"error": "Task not completed"}), 400
-        
-    try:
-        # Load detailed report
-        report_path = os.path.join(RESULTS_FOLDER, f"analysis_report_{task_id}.json")
-        if os.path.exists(report_path):
+    """Get detailed results for a completed task.
+
+    Serves the persisted report from disk whenever it exists, so past
+    analyses stay viewable via /?task=<id> even after a server restart
+    (the in-memory task store is cleared on restart)."""
+    report_path = os.path.join(RESULTS_FOLDER, f"analysis_report_{task_id}.json")
+
+    if os.path.exists(report_path):
+        try:
             with open(report_path, 'r') as f:
                 report = json.load(f)
             return jsonify(report)
-        else:
-            return jsonify(status_info["data"])
-            
-    except Exception as e:
-        logging.error(f"Failed to load results for task {task_id}: {e}")
-        return jsonify({"error": "Failed to load results"}), 500
+        except Exception as e:
+            logging.error(f"Failed to load results for task {task_id}: {e}")
+            return jsonify({"error": "Failed to load results"}), 500
+
+    # No saved report — fall back to in-memory status semantics.
+    if task_id not in task_status_store:
+        return jsonify({"error": "Task not found"}), 404
+
+    status_info = task_status_store[task_id]
+    if status_info["status"] != "completed":
+        return jsonify({"error": "Task not completed"}), 400
+
+    return jsonify(status_info.get("data") or {"error": "No report available"})
 
 @app.route('/download/<task_id>/<asset_type>')
 def download_asset(task_id, asset_type):
@@ -1493,6 +1554,33 @@ def detect_objects(image_path, prefix):
     except Exception as e:
         logging.error(f"Object detection failed: {e}")
         return None
+
+
+def detect_layer_summary(image_paths, prefix, k=5):
+    """Run road-layer detection over up to k sample images and summarise.
+
+    Returns {"dominant": <layer name or None>, "preview": <annotated image
+    path>, "detections": [...all detections...], "scores": {layer: conf_sum}}.
+    The dominant layer is the class with the highest summed confidence across
+    the sampled images (robust to the odd spurious box on a single frame).
+    """
+    from collections import Counter
+    samples = [p for p in (image_paths or []) if p][:k]
+    all_dets, preview, score = [], None, Counter()
+    for img in samples:
+        res = detect_objects(img, prefix)
+        if not res:
+            continue
+        if preview is None and res.get("image_path"):
+            preview = res["image_path"]
+        for d in res.get("detections", []):
+            all_dets.append(d)
+            if d.get("class_id") is not None:
+                score[d["layer"]] += float(d.get("confidence", 0))
+    dominant = score.most_common(1)[0][0] if score else None
+    return {"dominant": dominant, "preview": preview,
+            "detections": all_dets, "scores": dict(score)}
+
 
 def check_webodm_connection():
     """Check if WebODM is accessible"""

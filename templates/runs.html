@@ -1,104 +1,195 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <title>Past Analyses - Construction Volume</title>
-    <style>
-        body {
-            font-family: 'Segoe UI', Tahoma, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            min-height: 100vh;
-            padding: 20px;
-            margin: 0;
-        }
-        .container {
-            max-width: 1100px;
-            margin: 0 auto;
-            background: white;
-            border-radius: 15px;
-            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
-            overflow: hidden;
-        }
-        .header {
-            background: linear-gradient(135deg, #2c3e50, #34495e);
-            color: white;
-            padding: 26px 30px;
-        }
-        .header h1 { margin: 0; font-size: 1.7rem; }
-        .header a { color: #a5b4fc; text-decoration: none; font-size: 0.95rem; }
-        .content { padding: 30px; }
-        .empty {
-            text-align: center;
-            padding: 60px 20px;
-            color: #7f8c8d;
-        }
-        table { width: 100%; border-collapse: collapse; }
-        th {
-            background: #2c3e50;
-            color: white;
-            padding: 12px;
-            text-align: left;
-            font-size: 0.9rem;
-        }
-        td {
-            padding: 10px 12px;
-            border-bottom: 1px solid #ecf0f1;
-            font-size: 0.9rem;
-        }
-        tr:hover td { background: #f8f9fa; }
-        a.view-link {
-            color: #3498db;
-            text-decoration: none;
-            font-weight: 600;
-        }
-        a.view-link:hover { text-decoration: underline; }
-        .nowrap { white-space: nowrap; }
-        .num { text-align: right; }
-    </style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Past Analyses — Construction Volume Analysis</title>
+
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <script>
+    tailwind.config = {
+      theme: { extend: {
+        fontFamily: { sans: ["Geist","system-ui","sans-serif"], mono: ["Geist Mono","ui-monospace","monospace"] },
+        borderRadius: { DEFAULT:"4px", md:"4px", lg:"6px", xl:"8px" },
+        colors: { brand: { DEFAULT:"#2563eb", dark:"#1d4ed8", light:"#eff6ff" } },
+      }},
+    };
+  </script>
+  <style>
+    body { font-family: "Geist", system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+    .mono { font-family: "Geist Mono", ui-monospace, monospace; }
+    .tnum { font-variant-numeric: tabular-nums; }
+    ::selection { background: #bfdbfe; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .spin { animation: spin 0.7s linear infinite; }
+    @keyframes navslide { 0% { transform: translateX(-100%); } 100% { transform: translateX(400%); } }
+    .navslide { animation: navslide 1s ease-in-out infinite; }
+    @keyframes shimmer { 100% { background-position: -200% 0; } }
+    .skel { background: linear-gradient(90deg,#f1f5f9 25%,#e2e8f0 37%,#f1f5f9 63%); background-size: 200% 100%; animation: shimmer 1.4s ease infinite; }
+  </style>
 </head>
-<body>
-    <div class="container">
-        <div class="header">
-            <h1>📋 Past Analyses</h1>
-            <a href="/">&larr; Back to new analysis</a>
-        </div>
-        <div class="content">
-            {% if runs %}
-            <table>
-                <thead>
-                    <tr>
-                        <th>Project</th>
-                        <th>Date</th>
-                        <th class="num">Volume (m³)</th>
-                        <th class="num">Total Cost</th>
-                        <th>Task ID</th>
-                        <th></th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for r in runs %}
-                    <tr>
-                        <td>{{ r.project_name }}</td>
-                        <td class="nowrap">{{ r.timestamp[:19] if r.timestamp else '-' }}</td>
-                        <td class="num">{{ '%.2f'|format(r.volume_m3) if r.volume_m3 is not none else '-' }}</td>
-                        <td class="num">
-                            {% if r.total_cost is not none %}
-                                {{ r.currency }} {{ '{:,.0f}'.format(r.total_cost) }}
-                            {% else %}-{% endif %}
-                        </td>
-                        <td class="nowrap"><code>{{ r.task_id[:8] if r.task_id else '-' }}</code></td>
-                        <td><a class="view-link" href="/?task={{ r.task_id }}">View &rarr;</a></td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-            {% else %}
-            <div class="empty">
-                <h3>No analyses yet</h3>
-                <p>Run an analysis from the <a href="/">main page</a> to see it listed here.</p>
-            </div>
-            {% endif %}
-        </div>
+<body class="bg-slate-50 text-slate-900">
+
+  <!-- top navigation loading bar -->
+  <div id="navLoader" class="pointer-events-none fixed inset-x-0 top-0 z-50 h-0.5 overflow-hidden opacity-0 transition-opacity duration-150">
+    <div class="navslide h-full w-1/4 rounded-full bg-brand"></div>
+  </div>
+
+  <!-- NAV -->
+  <nav class="sticky top-0 z-30 border-b border-slate-200 bg-white/85 backdrop-blur">
+    <div class="mx-auto flex h-[60px] max-w-[1120px] items-center justify-between px-6 md:px-8">
+      <a href="/" class="flex items-center gap-2.5">
+        <span class="flex h-7 w-7 items-center justify-center rounded bg-brand">
+          <i data-lucide="mountain-snow" class="h-4 w-4 text-white"></i>
+        </span>
+        <span class="text-[15px] font-bold tracking-tight">Construction Volume Analysis</span>
+      </a>
+      <div class="flex items-center gap-5 text-sm font-medium">
+        <a href="/app" class="text-slate-500 hover:text-slate-900">New Analysis</a>
+        <a href="/runs" class="text-brand">Past Analyses</a>
+      </div>
     </div>
+  </nav>
+
+  <main class="mx-auto max-w-[1120px] px-6 pb-24 pt-8 md:px-8">
+
+    <header class="mb-8 flex flex-wrap items-end justify-between gap-4">
+      <div>
+        <h1 class="text-3xl font-extrabold tracking-tight md:text-[34px]">Past analyses</h1>
+        <p class="mt-1.5 text-[15px] text-slate-500">Every completed earthwork run. Open one to view its full report.</p>
+      </div>
+      <a href="/app" class="inline-flex items-center gap-2 rounded bg-brand px-4 py-2.5 text-sm font-semibold text-white hover:bg-brand-dark">
+        <i data-lucide="plus" class="h-4 w-4"></i> New Analysis
+      </a>
+    </header>
+
+    <!-- Rendered by JS from the data island below. Skeleton shows until JS paints. -->
+    <div id="runsRoot">
+      <div class="overflow-hidden rounded-xl border border-slate-200 bg-white">
+        <div class="skel h-11 w-full"></div>
+        <div class="space-y-px p-0">
+          <div class="skel m-4 h-6 rounded"></div>
+          <div class="skel m-4 h-6 rounded"></div>
+          <div class="skel m-4 h-6 rounded"></div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!--
+    DATA ISLAND — Flask fills this via the required Jinja for-loop below.
+    It lives inside a type="application/json" script so it is never displayed;
+    the JS below parses it and paints the table. When this file is opened WITHOUT
+    Flask, the tags stay unprocessed, JSON.parse fails, and the page falls back to
+    sample rows — so no template code is ever visible to the user.
+  -->
+  <script id="runs-data" type="application/json">
+[
+{% for r in runs %}
+  {
+    "task_id": {{ r.task_id|tojson }},
+    "timestamp": {{ r.timestamp|tojson }},
+    "project_name": {{ r.project_name|tojson }},
+    "volume_m3": {{ r.volume_m3|tojson }},
+    "total_cost": {{ r.total_cost|tojson }},
+    "currency": {{ (r.currency or "PKR")|tojson }}
+  }{{ "," if not loop.last else "" }}
+{% endfor %}
+]
+  </script>
+
+  <script>
+  {% raw %}
+  (function () {
+    const $ = (s, r = document) => r.querySelector(s);
+    const esc = (s) => String(s == null ? "" : s).replace(/[&<>"]/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;" }[c]));
+    const nf = (n) => (n == null || isNaN(Number(n))) ? esc(n) : Number(n).toLocaleString("en-US", { maximumFractionDigits: 2 });
+
+    // Sample rows used only when opened outside Flask (unprocessed template).
+    const DEMO = [
+      { task_id:"a3f92e11-4b7c-9d01", timestamp:"Jul 6, 2026, 14:22", project_name:"N-25 Highway — Lahore-Multan Section (Phase 1)", volume_m3:14899.12, total_cost:37247800, currency:"PKR" },
+      { task_id:"77bc0a12-5521-4ee0", timestamp:"Jul 2, 2026, 09:10", project_name:"M-2 Motorway — Interchange 4 Embankment", volume_m3:8204.55, total_cost:20511375, currency:"PKR" },
+      { task_id:"12ff8890-aa31-40b2", timestamp:"Jun 28, 2026, 16:48", project_name:"Ring Road Phase 2 — Cut Section", volume_m3:-3140.9, total_cost:3769080, currency:"PKR" },
+    ];
+
+    function getRuns() {
+      const raw = ($("#runs-data").textContent || "").trim();
+      if (!raw || raw.indexOf("{{") !== -1 || raw.indexOf("{%") !== -1) return { rows: DEMO, demo: true };
+      try {
+        const parsed = JSON.parse(raw);
+        return { rows: Array.isArray(parsed) ? parsed : [], demo: false };
+      } catch (e) { return { rows: DEMO, demo: true }; }
+    }
+
+    function fmtDate(v) {
+      if (v == null || v === "") return "—";
+      const d = new Date(v);
+      // If it's an ISO-ish parseable date, format it; otherwise show as given.
+      return (!isNaN(d) && /\d{4}-\d{2}-\d{2}/.test(String(v))) ? d.toLocaleString("en-US", { year:"numeric", month:"short", day:"numeric", hour:"2-digit", minute:"2-digit" }) : String(v);
+    }
+
+    function render() {
+      const { rows } = getRuns();
+      const root = $("#runsRoot");
+      if (!rows.length) {
+        root.innerHTML =
+          '<div class="flex flex-col items-center justify-center rounded-xl border border-dashed border-slate-300 bg-white px-6 py-20 text-center">' +
+            '<span class="mb-4 flex h-12 w-12 items-center justify-center rounded-lg bg-slate-100"><i data-lucide="folder-search" class="h-6 w-6 text-slate-400"></i></span>' +
+            '<h2 class="text-lg font-semibold">No analyses yet</h2>' +
+            '<p class="mt-1.5 max-w-sm text-sm text-slate-500">Run your first earthwork analysis and it will show up here with its volume and cost.</p>' +
+            '<a href="/app" class="mt-6 inline-flex items-center gap-2 rounded bg-brand px-4 py-2.5 text-sm font-semibold text-white hover:bg-brand-dark"><i data-lucide="play" class="h-4 w-4"></i> Start an analysis</a>' +
+          '</div>';
+        try { lucide.createIcons(); } catch (e) {}
+        return;
+      }
+      const body = rows.map(r =>
+        '<tr class="border-b border-slate-100 last:border-0 hover:bg-slate-50/70">' +
+          '<td class="px-6 py-4 font-medium">' + esc(r.project_name || "Untitled project") + '</td>' +
+          '<td class="mono px-6 py-4 text-slate-500">' + esc(fmtDate(r.timestamp)) + '</td>' +
+          '<td class="mono px-6 py-4 text-right text-slate-700">' + nf(r.volume_m3) + '</td>' +
+          '<td class="mono whitespace-nowrap px-6 py-4 text-right font-semibold text-slate-900">' + esc(r.currency || "PKR") + ' ' + nf(r.total_cost) + '</td>' +
+          '<td class="mono px-6 py-4 text-slate-400">' + esc(String(r.task_id || "").slice(0, 8)) + '</td>' +
+          '<td class="px-6 py-4 text-right"><a href="/app?task=' + encodeURIComponent(r.task_id) + '" class="inline-flex items-center gap-1 font-semibold text-brand hover:text-brand-dark">View <i data-lucide="arrow-right" class="h-3.5 w-3.5"></i></a></td>' +
+        '</tr>').join("");
+      root.innerHTML =
+        '<div class="overflow-hidden rounded-xl border border-slate-200 bg-white">' +
+          '<table class="w-full text-sm"><thead>' +
+            '<tr class="border-b border-slate-200 bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-500">' +
+              '<th class="px-6 py-3 text-left">Project</th>' +
+              '<th class="px-6 py-3 text-left">Date</th>' +
+              '<th class="px-6 py-3 text-right">Volume (m³)</th>' +
+              '<th class="px-6 py-3 text-right">Total cost</th>' +
+              '<th class="px-6 py-3 text-left">Task ID</th>' +
+              '<th class="px-6 py-3"></th>' +
+            '</tr></thead>' +
+            '<tbody class="tnum">' + body + '</tbody>' +
+          '</table>' +
+        '</div>';
+      try { lucide.createIcons(); } catch (e) {}
+    }
+
+    // Thin top progress bar shown while navigating between pages.
+    (function setupNavLoader() {
+      const nav = $("#navLoader");
+      if (!nav) return;
+      document.addEventListener("click", (e) => {
+        const a = e.target.closest("a[href]");
+        if (!a) return;
+        const href = a.getAttribute("href");
+        if (a.target || a.hasAttribute("download") || !href || href.charAt(0) === "#") return;
+        if (a.origin !== location.origin) return;
+        nav.style.opacity = "1";
+      });
+      window.addEventListener("pageshow", () => { nav.style.opacity = "0"; });
+    })();
+
+    render();
+  })();
+  {% endraw %}
+  </script>
 </body>
 </html>
