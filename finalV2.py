@@ -23,6 +23,7 @@ from scurve import generate_planned_curve, build_scurve, render_scurve_png
 from progress import record_progress, actual_cumulative
 from report_excel import build_excel_report
 from ortho_preview import generate_orthophoto_preview
+from ortho_detect import detect_orthophoto
 import config_store
 
 app = Flask(__name__)
@@ -77,6 +78,22 @@ PROJECT_ID = int(os.environ.get("WEBODM_PROJECT_ID", "1"))  # WebODM project ID
 WEBODM_NODE_ID = os.environ.get("WEBODM_NODE_ID")
 # Max time (s) to wait for a WebODM task to finish - 6h covers most CPU runs.
 WEBODM_TASK_TIMEOUT = int(os.environ.get("WEBODM_TASK_TIMEOUT", "21600"))
+
+# Photogrammetry quality preset (WEBODM_QUALITY = safe | balanced | full).
+#   safe     - memory-safe for the 40 GB laptop (downscales to 2048 px).
+#   balanced - sharper, resize-to 4096; good middle ground on a GPU box.
+#   full     - no downscale (resize-to -1), sharpest orthophoto/DSM. Default.
+# The old "safe" values OOM'd nothing on the beefier GPU machine, so full is the
+# default there; set WEBODM_QUALITY=safe on the laptop to avoid OOM.
+WEBODM_QUALITY = os.environ.get("WEBODM_QUALITY", "full").lower()
+QUALITY_PRESETS = {
+    "safe":     {"feature-quality": "medium", "pc-quality": "medium",
+                 "resize-to": "2048", "orthophoto-resolution": "5", "dem-resolution": "5"},
+    "balanced": {"feature-quality": "high",   "pc-quality": "high",
+                 "resize-to": "4096", "orthophoto-resolution": "2", "dem-resolution": "2"},
+    "full":     {"feature-quality": "high",   "pc-quality": "high",
+                 "resize-to": "-1",   "orthophoto-resolution": "1", "dem-resolution": "2"},
+}
 
 # CloudCompare Configuration - Updated paths for different OS
 CLOUDCOMPARE_PATHS = [
@@ -278,21 +295,21 @@ class ConstructionVolumeAnalyzer:
         url = f"{WEBODM_URL}/projects/{PROJECT_ID}/tasks/"
         
         files = []
-        # Memory-safe processing options (validated on the GPU node with 84 MP
-        # images at 24-26 GB WSL RAM). high pc-quality OOMs on large frames;
-        # medium + resize-to 2048 produces a solid DSM without crashing.
-        # Resolutions are in cm/px (ODM convention). DSM is what the volume
-        # calc consumes; the 3D model/mesh is not needed for volume.
+        # Processing options driven by the WEBODM_QUALITY preset (see config).
+        # Resolutions are in cm/px (ODM convention). DSM is what the volume calc
+        # consumes; the orthophoto quality is what detection/visuals depend on.
+        preset = QUALITY_PRESETS.get(WEBODM_QUALITY, QUALITY_PRESETS["full"])
+        logging.info(f"WebODM quality preset: {WEBODM_QUALITY} -> {preset}")
         data = {
             'name': f'{phase}_{self.task_id}_{datetime.now().strftime("%Y%m%d_%H%M%S")}',
             'options': json.dumps([
-                {'name': 'feature-quality', 'value': 'medium'},
-                {'name': 'pc-quality', 'value': 'medium'},
+                {'name': 'feature-quality', 'value': preset['feature-quality']},
+                {'name': 'pc-quality', 'value': preset['pc-quality']},
                 {'name': 'dsm', 'value': True},
                 {'name': 'dtm', 'value': True},
-                {'name': 'dem-resolution', 'value': '5'},
-                {'name': 'orthophoto-resolution', 'value': '5'},
-                {'name': 'resize-to', 'value': '2048'},
+                {'name': 'dem-resolution', 'value': preset['dem-resolution']},
+                {'name': 'orthophoto-resolution', 'value': preset['orthophoto-resolution']},
+                {'name': 'resize-to', 'value': preset['resize-to']},
                 {'name': 'max-concurrency', 'value': '4'},
             ])
         }
@@ -1062,7 +1079,47 @@ class ConstructionVolumeAnalyzer:
                 "accuracy_estimate": self.estimate_accuracy()
             }
         }
-        
+
+        # Road-layer detection on the before/after ORTHOMOSAICS (the stitched
+        # WebODM output that represents the whole image set), not sample frames.
+        # Runs before the BOQ so the AFTER-orthophoto detections drive the cost
+        # attribution. Skipped in existing-DSM mode (no orthophoto).
+        if YOLO_AVAILABLE and USING_ROAD_LAYER_MODEL:
+            ortho_imgsz = int(os.environ.get("YOLO_ORTHO_IMGSZ", "1536"))
+            det_results, dom = {}, {"before": None, "after": None}
+            for phase, assets in (("before", before_assets), ("after", after_assets)):
+                ortho = assets.get("orthophoto")
+                if ortho and os.path.exists(ortho):
+                    out = os.path.join(RESULTS_FOLDER,
+                                       f"ortho_det_{phase}_{self.task_id}.jpg")
+                    d = detect_orthophoto(ortho, model, out,
+                                          conf=YOLO_CONFIDENCE, imgsz=ortho_imgsz)
+                    if d:
+                        det_results[phase] = {
+                            "image": f"/result-file/ortho_det_{phase}_{self.task_id}.jpg",
+                            "dominant": d.get("dominant"),
+                            "detections": d.get("detections", []),
+                        }
+                        dom[phase] = d.get("dominant")
+            if det_results:
+                report["detection_results"] = det_results
+                b, a = dom["before"], dom["after"]
+                changed = bool(b and a and b != a)
+                report["detection_summary"] = {
+                    "before_layer": b or "None",
+                    "after_layer": a or "None",
+                    "changed": changed,
+                    "verdict": (
+                        f"{b} → {a}: new layer detected — progress confirmed"
+                        if changed else
+                        (f"{a}: same stage — no new layer detected" if a
+                         else "No road layers detected on the orthomosaics")
+                    ),
+                }
+                # Attribute the BOQ to the AFTER-orthophoto detections.
+                if det_results.get("after"):
+                    self.detected_layers = det_results["after"].get("detections", [])
+
         # Cost breakdown (Bill of Quantities) from volume + detected layers
         report["detected_layers"] = [
             {"layer": d.get("layer"), "confidence": round(d.get("confidence", 0), 3)}
@@ -1172,36 +1229,13 @@ def upload():
             gcp_file.save(gcp_path)
             logging.info(f"Saved GCP file: {gcp_path}")
         
-        # Road-layer detection on a sample of each set. The dominant stage in
-        # BEFORE vs AFTER, and the change between them, is the "site change"
-        # signal from the methodology (AI Detection stage).
-        detection_results = {}
-        detection_summary = {}
-        if YOLO_AVAILABLE and request.form.get('enable_detection') == 'true':
-            before_sum = detect_layer_summary(before_paths, "before")
-            after_sum = detect_layer_summary(after_paths, "after")
-            detection_results = {"before": before_sum, "after": after_sum}
-            b, a = before_sum["dominant"], after_sum["dominant"]
-            changed = bool(b and a and b != a)
-            detection_summary = {
-                "before_layer": b or "None",
-                "after_layer": a or "None",
-                "changed": changed,
-                "verdict": (
-                    f"{b} → {a}: new layer detected — progress confirmed"
-                    if changed else
-                    (f"{a}: same stage — no new layer detected" if a
-                     else "No road layers detected")
-                ),
-            }
+        # Road-layer detection now runs on the before/after ORTHOMOSAICS after
+        # photogrammetry (see generate_analysis_report) — not on sample frames —
+        # so the results reflect the true stitched output. Nothing to do here.
 
         # Start background processing
         task_id = str(uuid.uuid4())
         analyzer = ConstructionVolumeAnalyzer(task_id)
-
-        # Attach AFTER-set detections (used later for the cost breakdown)
-        if detection_results.get("after"):
-            analyzer.detected_layers = detection_results["after"].get("detections", [])
 
         thread = threading.Thread(
             target=analyzer.process_construction_analysis,
@@ -1209,26 +1243,14 @@ def upload():
         )
         thread.daemon = True
         thread.start()
-        
+
         response_data = {
             "success": True,
             "task_id": task_id,
             "message": "Processing started",
             "options": options
         }
-        
-        if detection_results:
-            response_data["detection_results"] = {}
-            for phase in ("before", "after"):
-                res = detection_results.get(phase)
-                if res and res.get("preview"):
-                    response_data["detection_results"][phase] = {
-                        "image": f"/result-file/{os.path.basename(res['preview'])}",
-                        "dominant": res.get("dominant"),
-                        "detections": res.get("detections", []),
-                    }
-            response_data["detection_summary"] = detection_summary
-        
+
         return jsonify(response_data)
         
     except Exception as e:
